@@ -51,6 +51,13 @@ server {
         add_header Cache-Control "no-store";
     }
 }
+
+# 可选但建议：HTTP 自动跳 HTTPS
+server {
+    listen 80;
+    server_name your-domain.example.com;
+    return 301 https://$host$request_uri;
+}
 ```
 
 要点：
@@ -71,13 +78,27 @@ server {
 |---|---|
 | 采样率 / 声道 | 48000 Hz / 2 ch |
 | Blob Worklet | pass（约 3–4 ms） |
-| 同源 Worklet URL | pass（约 50–80 ms） |
+| 同源 Worklet URL | 曾 pass；第二个 AudioContext 可能超时/受限，非主路径 |
 | WorkletNode | pass |
 | baseLatency / outputLatency | 5.3 ms + 16.0 ms（浏览器上报） |
 | 1 分钟稳定性 | 592 次心跳，最大间隔 106.5 ms，60 fps，pass |
 | 页面异常 | 0 |
 
 真车重点看的是：车机 SoC 下的 Worklet 加载、DSP/ANC 后的实际听感、切导航/语音助手后的音频焦点恢复，以及 10 分钟长稳。
+
+### 首次真车结果（摘要）
+
+| 项目 | 结果 |
+|---|---|
+| 浏览器 | NioBrowser/1.1 · Chrome 128 · Linux armv81 |
+| 部署 | HTTP + IP（非 HTTPS） |
+| AudioWorklet | 被 secure-context 禁用（`AudioWorkletNode` 仍存在） |
+| AudioContext | 48000 Hz / 2 ch / running |
+| 上报延迟 | 10 + 80 = 90 ms |
+| 10 分钟降级发声 | 完整跑完，0 异常标记，59.7 fps，音频状态稳定 |
+| 详细分析 | [docs/p0-field-report.md](docs/p0-field-report.md) |
+
+**结论：HTTP 是这次 Worklet 失败的直接原因；车机本身是现代 Chromium，换 HTTPS 后预期可用。** P0.1 已增加非 HTTPS 红色提示、Worklet “被浏览器禁用”状态，以及后台长帧不计入 FPS 的修正。
 
 ---
 
@@ -176,6 +197,26 @@ dist/              构建产物（已 gitignore）
 - **车机可能限制** 全屏、屏幕常亮、后台音频、第二路 `AudioContext`；这些都会被记录，不作为失败硬条件。
 - **ANC 可能抵消低频**。如果深沉的 V8 低频在车内明显变薄，P1 需要把主要能量放到 150 Hz 以上，或确认能否走座椅扬声器。
 - **纯电车型**没有真实发动机；这是车内娱乐声浪，不是车外 AVAS 行人提示音，浏览器也无法路由到车外扬声器。
+
+---
+
+## 排查
+
+**Q：报告里 `secureContext=false`，`audioWorklet=false`，但 `AudioWorkletNode` 是 true？**
+
+这是 Chrome 的 secure-context 规则，不是车机不支持。NioBrowser/Chrome 128 在 `http://IP` 下会隐藏 `AudioWorklet`，只保留 `AudioWorkletNode` 构造函数。把同一份文件放到 HTTPS 域名下重新打开即可。页面 P0.1 会直接显示红色“需要 HTTPS”提示，并把 Worklet 标成“被浏览器禁用”。
+
+**Q：`Worklet (Blob)` 通过，但 `Worklet (同源 URL)` 失败？**
+
+同源 URL 测试会新建第二个 `AudioContext`，部分车机会限制第二路上下文或缓存策略。只要 Blob 和 `WorkletNode` 通过，应用主路径就可用；URL 测试失败只说明备用路径不可用，不影响声音。
+
+**Q：`fps.min` 很低，但 `fps.avg` 正常？**
+
+看 `events` 里是否有 `visibility hidden` / `visible`。切后台时 `requestAnimationFrame` 会暂停，恢复后的第一个间隔被误算成极低 FPS。P0.1 已把隐藏期间排除，并把可见状态 >2 s 的间隔单独记为 `longFrames`，不再混入 `min`。
+
+**Q：`outputLatency` 是 0 或 80 ms，哪个是真的？**
+
+都是浏览器上报值，不是声学实测。`0` 可能是未上报；`80` 可能是车机音频 HAL 的真实缓冲。最终以节拍器主观听感为准。
 
 ---
 

@@ -373,6 +373,17 @@ body::before {
   color: var(--warn);
 }
 
+.notice.danger {
+  border-color: rgba(255, 77, 94, 0.34);
+  border-left-color: var(--bad);
+  background: rgba(255, 77, 94, 0.08);
+  color: #ffc2c8;
+}
+
+.notice.danger strong {
+  color: #ff8b96;
+}
+
 /* ---------- cards ---------- */
 
 .grid {

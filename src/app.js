@@ -81,7 +81,7 @@
       stateChanges: 0,
       maxGap: 0,
       degraded: false,
-      fps: { samples: [], frames: 0, lastAt: 0, worstFrameMs: 0, raf: 0 },
+      fps: { samples: [], frames: 0, lastAt: 0, worstFrameMs: 0, longFrames: 0, raf: 0 },
       memoryStart: null,
       memoryEnd: null,
       heartbeatCount: 0,
@@ -868,6 +868,9 @@
     if (info.status === "pass") {
       return pillWithText(t("value.pass"), "ok", info.ms === null ? "" : fmtMs(info.ms));
     }
+    if (info.status === "blocked") {
+      return pillWithText(t("value.blocked"), "warn", t("secure.requiredShort"));
+    }
     return pillWithText(t("value.fail"), "bad", info.error ? "· " + info.error : "");
   }
 
@@ -1062,6 +1065,9 @@
       els.secureBadge.textContent = secure.text;
       els.secureBadge.className = "pill " + secure.kind;
     }
+    if (els.secureNotice) {
+      els.secureNotice.hidden = !!env.secureContext;
+    }
 
     var statusText = t("status.idle");
     if (state.detecting) statusText = t("status.detecting");
@@ -1097,6 +1103,9 @@
       if (nodeStatus === "pass") {
         els.heroWorklet.textContent = "OK";
         els.heroWorklet.className = "ok";
+      } else if (nodeStatus === "blocked" || blobStatus === "blocked" || urlStatus === "blocked") {
+        els.heroWorklet.textContent = t("secure.requiredShort");
+        els.heroWorklet.className = "warn";
       } else if (nodeStatus === "fail" || (blobStatus === "fail" && urlStatus === "fail")) {
         els.heroWorklet.textContent = "FAIL";
         els.heroWorklet.className = "bad";
@@ -1156,6 +1165,9 @@
     line(t("stability.glitchMarks"), String(summary.marks));
     line(t("stability.stateChanges"), String(summary.stateChanges));
     line(t("stability.degraded"), boolText(summary.degraded));
+    if (summary.fps && summary.fps.longFrames) {
+      line(t("stability.longFrames"), String(summary.fps.longFrames));
+    }
 
     var verdict = document.createElement("p");
     verdict.style.margin = "9px 0 0";
@@ -1382,6 +1394,21 @@
   async function loadWorklet() {
     if (state.worklet.loaded || state.worklet.attempted) return;
     state.worklet.attempted = true;
+
+    if (!window.isSecureContext) {
+      var blockedMessage = "AudioWorklet requires HTTPS (secure context)";
+      state.worklet.blob = { status: "blocked", ms: 0, error: blockedMessage };
+      state.worklet.url = { status: "blocked", ms: 0, error: blockedMessage, url: null };
+      state.worklet.node = { status: "blocked", ms: 0, error: blockedMessage };
+      state.worklet.loaded = false;
+      state.worklet.processorReady = false;
+      log("worklet-blocked", t("log.workletBlocked"));
+      showToast(t("toast.workletBlocked"), 5200);
+      renderAudio();
+      renderHero();
+      updateControlState();
+      return;
+    }
 
     var ctx = state.ctx;
     if (!ctx || !ctx.audioWorklet) {
@@ -1621,6 +1648,17 @@
         return;
       }
     }
+    if (!window.isSecureContext) {
+      state.worklet.url = {
+        status: "blocked",
+        ms: 0,
+        error: "AudioWorklet requires HTTPS (secure context)",
+        url: new URL("worklet.js", window.location.href).href
+      };
+      renderAudio();
+      renderHero();
+      return;
+    }
     if (!state.ctx || !state.ctx.audioWorklet) {
       state.worklet.url = {
         status: "fail",
@@ -1744,7 +1782,11 @@
     startFallback(workletMode);
     state.playing = true;
     log("fallback", t("log.fallback", { mode: modeLabel(mode) }));
-    showToast(t("toast.workletFail"));
+    showToast(
+      state.worklet.blob.status === "blocked"
+        ? t("toast.workletBlocked")
+        : t("toast.workletFail")
+    );
     updateAudioStatus();
     startScope();
     renderHero();
@@ -2060,12 +2102,33 @@
       frames: 0,
       lastAt: performance.now(),
       worstFrameMs: 0,
+      longFrames: 0,
       raf: 0
     };
     function tick(now) {
       if (!s.running) return;
-      s.fps.frames += 1;
+
+      // rAF stops while the page is hidden. Do not turn that gap into a
+      // "0 fps" sample; the event log already records visibility changes.
+      if (document.visibilityState !== "visible") {
+        s.fps.frames = 0;
+        s.fps.lastAt = now;
+        s.fps.raf = requestAnimationFrame(tick);
+        return;
+      }
+
       var dt = now - s.fps.lastAt;
+      if (dt > 2000) {
+        // A visible long frame is real, but keep it out of the min-fps
+        // calculation and report it separately.
+        s.fps.longFrames += 1;
+        s.fps.frames = 0;
+        s.fps.lastAt = now;
+        s.fps.raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      s.fps.frames += 1;
       if (dt > s.fps.worstFrameMs) s.fps.worstFrameMs = dt;
       if (dt >= 1000) {
         var fps = (s.fps.frames * 1000) / dt;
@@ -2141,7 +2204,7 @@
       stateChanges: 0,
       maxGap: 0,
       degraded: !state.worklet.loaded,
-      fps: { samples: [], frames: 0, lastAt: 0, worstFrameMs: 0, raf: 0 },
+      fps: { samples: [], frames: 0, lastAt: 0, worstFrameMs: 0, longFrames: 0, raf: 0 },
       memoryStart: getMemoryMB(),
       memoryEnd: null,
       heartbeatCount: 0,
@@ -2254,7 +2317,7 @@
       maxGapMs: s.maxGap,
       degraded: s.degraded,
       reasons: reasons,
-      fps: { avg: avg, min: min, samples: samples.length },
+      fps: { avg: avg, min: min, samples: samples.length, longFrames: s.fps.longFrames || 0 },
       memoryStart: s.memoryStart,
       memoryEnd: s.memoryEnd,
       heartbeatCount: s.heartbeatCount
@@ -2647,7 +2710,7 @@
     state.stability.heartbeatCount = 0;
     state.stability.memoryStart = null;
     state.stability.memoryEnd = null;
-    state.stability.fps = { samples: [], frames: 0, lastAt: 0, worstFrameMs: 0, raf: 0 };
+    state.stability.fps = { samples: [], frames: 0, lastAt: 0, worstFrameMs: 0, longFrames: 0, raf: 0 };
     renderAll();
     log("clear", t("log.clear"));
     showToast(t("toast.cleared"));
@@ -2709,6 +2772,7 @@
       resetBtn: byId("resetBtn"),
       heroStatus: byId("heroStatus"),
       secureBadge: byId("secureBadge"),
+      secureNotice: byId("secureNotice"),
       scope: byId("scope"),
       scopeState: byId("scopeState"),
       heroLatency: byId("heroLatency"),
@@ -2874,7 +2938,11 @@
         if (state.display.wakeLockWanted && state.display.wakeLockApi && !state.display.wakeLockSentinel) {
           requestWakeLock(true);
         }
-        if (state.stability.running) updateStabilityUI();
+        if (state.stability.running) {
+          state.stability.fps.lastAt = performance.now();
+          state.stability.fps.frames = 0;
+          updateStabilityUI();
+        }
       } else if (state.stability.running) {
         saveReport(true, true);
       }
