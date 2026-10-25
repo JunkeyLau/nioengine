@@ -1,0 +1,11 @@
+{
+  "name": "nioengine-p0",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Engine Sound Lab P0 — in-car browser audio capability probe",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "python3 -m http.server 4173 --directory dist"
+  }
+}

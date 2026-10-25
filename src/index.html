@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b10">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Engine Sound Lab P0 — in-car browser audio capability probe">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b10'/%3E%3Cpath d='M12 40h8l5-17 6 26 5-21 4 12h12' fill='none' stroke='%23ff5a1f' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <title>Engine Sound Lab · P0</title>
+  <!-- INLINE_STYLES -->
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">NIO<span>·</span>ENGINE <em>P0</em></div>
+        <div class="brand-sub" data-i18n="app.subtitle">车机音频能力探测</div>
+      </div>
+      <div class="top-actions">
+        <span id="secureBadge" class="pill neutral">—</span>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow" data-i18n="hero.eyebrow">P0 · 能力探测</div>
+          <h1 data-i18n="hero.title">先确认车机能不能稳稳地发出声浪</h1>
+          <p class="lede" data-i18n="hero.body">
+            这个页面会检测车机浏览器的 Web Audio、AudioWorklet、链路延迟、屏幕形态与长时间稳定性。
+            不会上传任何数据，结果只保存在本机。
+          </p>
+          <div class="hero-actions">
+            <button id="detectBtn" class="btn primary" type="button" data-i18n="hero.start">开始能力检测</button>
+            <button id="resetBtn" class="btn ghost" type="button" data-i18n="hero.restart">刷新页面</button>
+          </div>
+          <div id="heroStatus" class="hero-status" role="status" aria-live="polite">尚未检测</div>
+        </div>
+
+        <div class="hero-visual">
+          <div class="scope-wrap">
+            <canvas id="scope" aria-hidden="true"></canvas>
+            <div class="scope-meta">
+              <span data-i18n="audio.scope">实时波形</span>
+              <span id="scopeState">IDLE</span>
+            </div>
+          </div>
+          <div class="hero-metrics">
+            <div>
+              <span data-i18n="audio.latencyShort">链路延迟</span>
+              <strong id="heroLatency">—</strong>
+            </div>
+            <div>
+              <span data-i18n="audio.sampleRateShort">采样率</span>
+              <strong id="heroRate">—</strong>
+            </div>
+            <div>
+              <span data-i18n="audio.workletShort">AudioWorklet</span>
+              <strong id="heroWorklet">—</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="notice" role="note">
+        <strong data-i18n="safety.title">安全提示</strong>
+        <span data-i18n="safety.body">请在驻车或由乘客操作时使用；行车中请勿注视屏幕。测试声可能较大，请先调低车机音量。</span>
+      </div>
+
+      <div class="grid">
+        <section class="card" aria-labelledby="envTitle">
+          <header class="card-head">
+            <h2 id="envTitle" data-i18n="section.environment">环境</h2>
+            <span class="card-tag" data-i18n="tag.auto">自动采集</span>
+          </header>
+          <div id="envRows" class="rows"></div>
+        </section>
+
+        <section class="card" aria-labelledby="audioTitle">
+          <header class="card-head">
+            <h2 id="audioTitle" data-i18n="section.audio">音频能力</h2>
+            <span class="card-tag" data-i18n="tag.tap">需要点击</span>
+          </header>
+          <div id="audioRows" class="rows"></div>
+          <p class="hint small" data-i18n="audio.latencyNote">baseLatency / outputLatency 是浏览器上报值，不等于真实声学延迟；最终请用节拍器主观判断。</p>
+
+          <div class="controls">
+            <div class="control-row">
+              <label for="rpmRange" data-i18n="audio.rpm">转速</label>
+              <output id="rpmOut">900 rpm</output>
+            </div>
+            <input id="rpmRange" class="range" type="range" min="800" max="6500" step="50" value="900" disabled>
+
+            <div class="control-row">
+              <label for="volRange" data-i18n="audio.volume">音量</label>
+              <output id="volOut">35%</output>
+            </div>
+            <input id="volRange" class="range" type="range" min="0" max="100" step="1" value="35">
+
+            <div class="btn-row" role="group" aria-label="Audio tests">
+              <button id="engineBtn" class="btn small" type="button" data-i18n="audio.testEngine">发动机</button>
+              <button id="revBtn" class="btn small" type="button" data-i18n="audio.testRev">自动轰油门</button>
+              <button id="sineBtn" class="btn small" type="button" data-i18n="audio.testSine">正弦 440Hz</button>
+              <button id="leftBtn" class="btn small" type="button" data-i18n="audio.testLeft">左声道</button>
+              <button id="rightBtn" class="btn small" type="button" data-i18n="audio.testRight">右声道</button>
+              <button id="clickBtn" class="btn small" type="button" data-i18n="audio.testClick">节拍器</button>
+              <button id="stopBtn" class="btn small danger" type="button" data-i18n="audio.stop">停止</button>
+            </div>
+
+            <div id="audioStatus" class="status-line">尚无 AudioContext，请点击开始检测</div>
+
+            <div class="sub-actions">
+              <button id="chimeBtn" class="btn tiny ghost" type="button" data-i18n="audio.chime">再听确认音</button>
+              <button id="urlTestBtn" class="btn tiny ghost" type="button" data-i18n="audio.testUrl">测试同源 worklet.js</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="displayTitle">
+          <header class="card-head">
+            <h2 id="displayTitle" data-i18n="section.display">显示与交互</h2>
+            <span class="card-tag" data-i18n="tag.auto">自动采集</span>
+          </header>
+          <div id="displayRows" class="rows"></div>
+
+          <div class="controls">
+            <div class="btn-row">
+              <button id="fpsBtn" class="btn small" type="button" data-i18n="display.testFps">测试 3 秒帧率</button>
+              <button id="fullscreenBtn" class="btn small" type="button" data-i18n="display.fullscreen">进入全屏</button>
+              <button id="wakeBtn" class="btn small" type="button" data-i18n="display.wakeLock">保持屏幕常亮</button>
+            </div>
+            <div id="fpsOut" class="status-line">未测试</div>
+            <div id="displayStatus" class="status-line"></div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="stabilityTitle">
+          <header class="card-head">
+            <h2 id="stabilityTitle" data-i18n="section.stability">稳定性</h2>
+            <span class="card-tag" data-i18n="tag.manual">手动执行</span>
+          </header>
+          <p class="hint" data-i18n="stability.hint">
+            建议至少跑 10 分钟。测试中可切到导航 / 语音助手再切回，观察声音是否恢复；也可旋转屏幕测试横竖屏布局。
+          </p>
+
+          <div class="controls">
+            <div class="control-row">
+              <label for="durSelect" data-i18n="stability.duration">时长</label>
+              <select id="durSelect" class="select">
+                <option value="1">1 min</option>
+                <option value="3">3 min</option>
+                <option value="10" selected>10 min</option>
+                <option value="30">30 min</option>
+              </select>
+            </div>
+
+            <div class="btn-row">
+              <button id="stabilityBtn" class="btn primary" type="button" data-i18n="stability.start">开始稳定性测试</button>
+              <button id="stabilityStopBtn" class="btn danger" type="button" data-i18n="stability.stop" disabled>停止测试</button>
+            </div>
+
+            <div class="progress"><div id="progressBar"></div></div>
+
+            <div class="stats">
+              <div><span data-i18n="stability.elapsed">已运行</span><strong id="statElapsed">00:00</strong></div>
+              <div><span data-i18n="stability.state">音频状态</span><strong id="statState">—</strong></div>
+              <div><span data-i18n="stability.heartbeats">心跳</span><strong id="statHeartbeats">0</strong></div>
+              <div><span data-i18n="stability.maxGap">最大间隔</span><strong id="statMaxGap">—</strong></div>
+              <div><span data-i18n="stability.fps">帧率</span><strong id="statFps">—</strong></div>
+              <div><span data-i18n="stability.memory">内存</span><strong id="statMemory">—</strong></div>
+            </div>
+
+            <button id="markBtn" class="btn mark" type="button" disabled data-i18n="stability.mark">我听到断音 / 爆音</button>
+            <p class="hint small" data-i18n="stability.backgroundHint">
+              车机音频可能被导航、语音助手或系统提示音抢占。切换前后台后，请确认日志里的 audio-state 事件，以及声音是否自动恢复。
+            </p>
+            <div id="stabilitySummary" class="summary" hidden></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card report-card" aria-labelledby="reportTitle">
+        <header class="card-head">
+          <h2 id="reportTitle" data-i18n="section.report">报告</h2>
+          <span class="card-tag" data-i18n="tag.local">仅本机</span>
+        </header>
+        <p class="hint" data-i18n="report.hint">
+          报告为 JSON，包含环境、音频、显示与稳定性结果。复制或下载后发给开发同学即可。
+        </p>
+        <div class="btn-row">
+          <button id="copyBtn" class="btn small" type="button" data-i18n="report.copy">复制 JSON</button>
+          <button id="downloadBtn" class="btn small" type="button" data-i18n="report.download">下载 JSON</button>
+          <button id="loadSavedBtn" class="btn small ghost" type="button" data-i18n="report.loadSaved" hidden>载入上次报告</button>
+          <button id="clearBtn" class="btn small danger ghost" type="button" data-i18n="report.clear">清除本机数据</button>
+        </div>
+        <div id="savedHint" class="status-line"></div>
+        <pre id="reportJson" class="report" tabindex="0">{}</pre>
+      </section>
+
+      <section class="card events-card" aria-labelledby="eventsTitle">
+        <header class="card-head">
+          <h2 id="eventsTitle" data-i18n="section.events">事件日志</h2>
+          <button id="clearLogBtn" class="btn tiny ghost" type="button" data-i18n="events.clear">清空</button>
+        </header>
+        <div id="eventLog" class="event-log">
+          <div class="empty" data-i18n="events.empty">暂无事件</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span data-i18n="footer.left">Engine Sound Lab · P0 能力探测</span>
+      <span id="buildInfo">—</span>
+    </footer>
+  </div>
+
+  <button id="panicBtn" class="panic" type="button" hidden data-i18n="audio.panic">■ 停止声音</button>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="flash" class="flash"></div>
+
+  <script>window.P0_BUILD = { version: "__VERSION__", time: "__BUILD_TIME__" };</script>
+  <script type="text/plain" id="worklet-source">/*__WORKLET__*/</script>
+  <script>/*__I18N__*/</script>
+  <script>/*__APP__*/</script>
+</body>
+</html>
