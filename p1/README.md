@@ -21,6 +21,18 @@ P1 版本：`0.2.0`。
 
 ### 部署
 
+#### Cloudflare Worker + GitHub
+
+仓库根目录已经包含 `wrangler.jsonc` / `worker.mjs` / `scripts/assemble.mjs`。在 Cloudflare Workers Builds 中连接仓库后：
+
+- Build command：`npm run build:all`
+- Deploy command：`npx wrangler deploy`
+- Root directory：`/`
+
+部署后 P1 在 `/`，P0 能力探测在 `/p0/`。完整配置、自定义域名和排错见 **[docs/cloudflare-worker-deploy.md](../docs/cloudflare-worker-deploy.md)**。
+
+#### 普通静态托管
+
 把这两个文件上传到**同一个 HTTPS 目录**：
 
 ```text

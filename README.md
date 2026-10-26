@@ -27,7 +27,40 @@ npm run serve:p1     # http://127.0.0.1:4174
 
 ### P1 部署
 
-把 `p1/dist/index.html` 和 `p1/dist/engine-worklet.js` 上传到同一个 HTTPS 目录，`.js` MIME 为 `application/javascript`。完整说明、操作、架构和真车测试清单见 **[p1/README.md](p1/README.md)**。
+#### 方式 A：Cloudflare Worker + GitHub（当前使用）
+
+仓库已包含：
+
+- `wrangler.jsonc`：Worker + Static Assets 配置
+- `worker.mjs`：`ASSETS` 绑定 + `no-store`
+- `scripts/assemble.mjs`：把 P1 / P0 组装到 `public/`
+
+```bash
+npm install
+npm run build:all
+npx wrangler dev      # 本地预览 http://localhost:8787
+```
+
+Cloudflare 里连接 GitHub 后：
+
+| 配置项 | 值 |
+|---|---|
+| Build command | `npm run build:all` |
+| Deploy command | `npx wrangler deploy` |
+| Root directory | `/` |
+| Node version | `NODE_VERSION=22` |
+
+部署结果：
+
+- `/` → P1
+- `/p0/` → P0 能力探测
+- `/engine-worklet.js`、`/p0/worklet.js` → Worklet 备用文件
+
+完整步骤（Git 连接、自定义域名、排错）见 **[docs/cloudflare-worker-deploy.md](docs/cloudflare-worker-deploy.md)**。
+
+#### 方式 B：普通静态托管
+
+把 `p1/dist/index.html` 和 `p1/dist/engine-worklet.js` 上传到同一个 HTTPS 目录，`.js` MIME 为 `application/javascript`。操作、架构和真车测试清单见 **[p1/README.md](p1/README.md)**。
 
 > P0 真车已知输出延迟约 **98 ms**（10 + 88）。P1 用连续虚拟驾驶和转速平滑弱化，但瞬时“踩下就轰”仍会略慢；这是车机音频 HAL 决定的，Worklet 不能降低。按你的要求，不走原生/OEM。
 
