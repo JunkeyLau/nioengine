@@ -127,6 +127,82 @@
         rolling: 0.012,
         topKmh: 270
       }
+    },
+    f1v10: {
+      id: "f1v10",
+      nameKey: "preset.f1v10.name",
+      descKey: "preset.f1v10.desc",
+      charKey: "preset.f1v10.char",
+      accent: "#ff3344",
+      accent2: "#ff8a7a",
+      cylinders: 10,
+      offsets: [0, 72, 144, 216, 288, 360, 432, 504, 576, 648],
+      banks: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+      idle: 3200,
+      redline: 18000,
+      limiter: 19000,
+      maxRpm: 20000,
+      res: [[480, 1200, 2400], [520, 1320, 2640]],
+      decay: 0.018,
+      pulseGain: 0.075,
+      click: 0.14,
+      subRatio: 0.5,
+      subGain: 0.008,
+      intakeGain: 1.3,
+      crackle: 1.0,
+      turbo: false,
+      drive: {
+        gears: [3.2, 2.45, 1.95, 1.6, 1.35, 1.15, 1.0, 0.88],
+        final: 3.4,
+        mass: 800,
+        wheelR: 0.33,
+        torque: 520,
+        torqueRpm: 15000,
+        shiftUp: 17000,
+        shiftDown: 8500,
+        launchRpm: 12000,
+        drag: 0.55,
+        rolling: 0.012,
+        topKmh: 340
+      }
+    },
+    v12: {
+      id: "v12",
+      nameKey: "preset.v12.name",
+      descKey: "preset.v12.desc",
+      charKey: "preset.v12.char",
+      accent: "#f5c518",
+      accent2: "#ffe08a",
+      cylinders: 12,
+      offsets: [0, 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660],
+      banks: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+      idle: 800,
+      redline: 8500,
+      limiter: 8700,
+      maxRpm: 9000,
+      res: [[300, 600, 1200], [320, 640, 1280]],
+      decay: 0.035,
+      pulseGain: 0.055,
+      click: 0.08,
+      subRatio: 0.5,
+      subGain: 0.015,
+      intakeGain: 0.7,
+      crackle: 0.85,
+      turbo: false,
+      drive: {
+        gears: [3.9, 2.45, 1.8, 1.42, 1.18, 0.97, 0.84],
+        final: 3.54,
+        mass: 1600,
+        wheelR: 0.35,
+        torque: 690,
+        torqueRpm: 5500,
+        shiftUp: 8200,
+        shiftDown: 3000,
+        launchRpm: 3000,
+        drag: 0.6,
+        rolling: 0.012,
+        topKmh: 350
+      }
     }
   };
 
@@ -433,7 +509,7 @@
 
   function buildPresetCards() {
     if (!els.presetCards) return;
-    var order = ["v8", "i4", "i6"];
+    var order = ["v8", "i4", "i6", "f1v10", "v12"];
     var nodes = [];
     for (var i = 0; i < order.length; i++) {
       (function (id) {
@@ -1010,10 +1086,11 @@
 
   function gearForSpeed(speed) {
     var cfg = state.preset.drive;
+    var lo = Math.max(1000, state.preset.redline * 0.25);
     if (speed < 0.5) return 1;
     for (var g = 1; g <= cfg.gears.length; g++) {
       var rpm = rpmFromSpeed(speed, g, cfg);
-      if (rpm >= 1800 && rpm <= cfg.shiftUp * 0.85) return g;
+      if (rpm >= lo && rpm <= cfg.shiftUp * 0.85) return g;
     }
     return cfg.gears.length;
   }
@@ -1275,11 +1352,13 @@
   function gpsInitialGear(speedMps) {
     if (speedMps < 0.5) return 1;
     var cfg = state.preset.drive;
+    var lo = state.preset.redline * 0.28;
+    var hi = state.preset.redline * 0.62;
     var fallback = 1;
     for (var g = 1; g <= cfg.gears.length; g++) {
       var rpm = rpmFromSpeed(speedMps, g, cfg);
-      if (rpm >= 2000 && rpm <= 4800) return g;
-      if (rpm < 2000) fallback = g;
+      if (rpm >= lo && rpm <= hi) return g;
+      if (rpm < lo) fallback = g;
     }
     return fallback;
   }
@@ -1936,7 +2015,9 @@
       ctx.shadowBlur = 0;
     }
 
-    var ticks = 16;
+    var labelStep = maxRpm <= 10000 ? 1000 : 2000;
+    var majorCount = Math.max(4, Math.round(maxRpm / labelStep));
+    var ticks = majorCount * 2;
     for (var i = 0; i <= ticks; i++) {
       var frac = i / ticks;
       var a = start + sweep * frac;
@@ -1956,7 +2037,7 @@
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         var lr = radius * 0.64;
-        ctx.fillText(String(Math.round(frac * maxRpm / 1000)), cx + Math.cos(a) * lr, cy + Math.sin(a) * lr);
+        ctx.fillText(String(Math.round((i / 2) * labelStep / 1000)), cx + Math.cos(a) * lr, cy + Math.sin(a) * lr);
       }
     }
 

@@ -454,7 +454,8 @@ class EngineP1Processor extends AudioWorkletProcessor {
       if (crossed) this.fire(i);
     }
 
-    var overrun = this.throttle < 0.08 && this.rpm > 2200 && this.load < 0.12;
+    var overrunFloor = Math.max(2200, this.idle * 1.35);
+    var overrun = this.throttle < 0.08 && this.rpm > overrunFloor && this.load < 0.12;
     if (overrun && this.mode === "running") {
       this.popTimer -= dt;
       if (this.popTimer <= 0) {

@@ -77,7 +77,7 @@
 
       "overlay.eyebrow": "P1 · ENGINE SOUND",
       "overlay.title": "让车机发出属于你的声浪",
-      "overlay.body": "三种发动机、虚拟驾驶、自动换挡；GPS 模式会请求定位权限，用真实车速驱动声浪。默认不上传任何内容。",
+      "overlay.body": "五种发动机、虚拟驾驶、自动换挡；GPS 模式会请求定位权限，用真实车速驱动声浪。默认不上传任何内容。",
       "overlay.choose": "选择声浪",
       "overlay.start": "启动发动机",
       "overlay.gps": "GPS 驱动",
@@ -94,6 +94,12 @@
       "preset.i6.name": "I6 3.0",
       "preset.i6.desc": "自吸直六 · 线性 · 高转绵密",
       "preset.i6.char": "NATURALLY ASPIRATED I6",
+      "preset.f1v10.name": "F1 V10",
+      "preset.f1v10.desc": "20,000 rpm 高转尖叫 · 无涡轮 · 赛车排气",
+      "preset.f1v10.char": "FORMULA V10",
+      "preset.v12.name": "V12 6.5",
+      "preset.v12.desc": "兰博基尼自吸 V12 · 高转咆哮 · 十二缸",
+      "preset.v12.char": "LAMBORGHINI V12",
 
       "toast.engineStarted": "发动机已启动",
       "toast.engineStopped": "发动机已熄火",
@@ -248,7 +254,7 @@
 
       "overlay.eyebrow": "P1 · ENGINE SOUND",
       "overlay.title": "Give the cockpit a voice",
-      "overlay.body": "Three engines, a virtual drivetrain and automatic shifts. GPS mode requests location to drive the sound with real speed; nothing is uploaded.",
+      "overlay.body": "Five engines, a virtual drivetrain and automatic shifts. GPS mode requests location to drive the sound with real speed; nothing is uploaded.",
       "overlay.choose": "Choose a sound",
       "overlay.start": "Start engine",
       "overlay.gps": "GPS drive",
@@ -265,6 +271,12 @@
       "preset.i6.name": "I6 3.0",
       "preset.i6.desc": "Naturally aspirated · linear · dense top end",
       "preset.i6.char": "NATURALLY ASPIRATED I6",
+      "preset.f1v10.name": "F1 V10",
+      "preset.f1v10.desc": "20,000 rpm scream · no turbo · race exhaust",
+      "preset.f1v10.char": "FORMULA V10",
+      "preset.v12.name": "V12 6.5",
+      "preset.v12.desc": "Lamborghini naturally aspirated V12 · high-rev howl",
+      "preset.v12.char": "LAMBORGHINI V12",
 
       "toast.engineStarted": "Engine started",
       "toast.engineStopped": "Engine stopped",
