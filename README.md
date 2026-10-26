@@ -86,19 +86,21 @@ server {
 
 真车重点看的是：车机 SoC 下的 Worklet 加载、DSP/ANC 后的实际听感、切导航/语音助手后的音频焦点恢复，以及 10 分钟长稳。
 
-### 首次真车结果（摘要）
+### 真车结果（两次）
 
-| 项目 | 结果 |
-|---|---|
-| 浏览器 | NioBrowser/1.1 · Chrome 128 · Linux armv81 |
-| 部署 | HTTP + IP（非 HTTPS） |
-| AudioWorklet | 被 secure-context 禁用（`AudioWorkletNode` 仍存在） |
-| AudioContext | 48000 Hz / 2 ch / running |
-| 上报延迟 | 10 + 80 = 90 ms |
-| 10 分钟降级发声 | 完整跑完，0 异常标记，59.7 fps，音频状态稳定 |
-| 详细分析 | [docs/p0-field-report.md](docs/p0-field-report.md) |
+| 项目 | 第一次：HTTP | 第二次：HTTPS |
+|---|---|---|
+| 部署 | `http://IP` | `https://nioengine.com/` |
+| `secureContext` | false | **true** |
+| AudioWorklet | 被 secure-context 禁用 | **pass**（Blob 68 ms / URL 432 ms / Node 2 ms） |
+| 10 分钟测试 | 降级发声，0 标记，59.7 fps | **Worklet 发声，0 标记，5921 心跳，59.1 fps** |
+| 上报延迟 | 10 + 80 = 90 ms | **10 + 88 = 98 ms** |
+| FPS 最低值 | 0.09（切后台假象） | 35.6（可见状态下真实低值） |
+| 详细分析 | [第一次](docs/p0-field-report.md) | [第二次](docs/p0-field-report-2.md) |
 
-**结论：HTTP 是这次 Worklet 失败的直接原因；车机本身是现代 Chromium，换 HTTPS 后预期可用。** P0.1 已增加非 HTTPS 红色提示、Worklet “被浏览器禁用”状态，以及后台长帧不计入 FPS 的修正。
+**结论：HTTPS 下 Worklet 与 10 分钟稳定性都通过；车机本身完全够用。** 现在唯一的产品级风险是约 **98 ms** 的输出延迟：连续声浪可以通过虚拟驾驶模型弱化，但“踩下就轰”的瞬时响应会偏慢。是否需要原生/OEM 方案，取决于节拍器主观测试。
+
+P0.2（`0.1.2`）把试听/延迟按钮移到了音频卡片顶部，避免按钮落在折叠线以下没被测试；同时保留 P0.1 的非 HTTPS 红色提示、Worklet “被浏览器禁用”状态和后台长帧修正。
 
 ---
 

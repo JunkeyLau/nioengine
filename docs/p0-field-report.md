@@ -5,6 +5,7 @@
 - 构建版本：`0.1.0`（build 2026-10-25T16:01:10Z）
 - 部署地址：HTTP + IP，非 HTTPS（具体地址略）
 - 结论先行：**这次 AudioWorklet 失败，直接原因是页面跑在 HTTP 上，不是 NioBrowser 不支持。**
+- 后续验证：第二次 HTTPS 运行已确认 Worklet 可用，见 [p0-field-report-2.md](p0-field-report-2.md)。
 
 ---
 

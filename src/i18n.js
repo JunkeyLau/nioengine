@@ -27,6 +27,7 @@
       "tag.local": "仅本机",
 
       "audio.scope": "实时波形",
+      "audio.testHint": "先试听声音和延迟，下面的能力数据会自动更新。",
       "audio.latencyShort": "链路延迟",
       "audio.sampleRateShort": "采样率",
       "audio.workletShort": "AudioWorklet",
@@ -339,6 +340,7 @@
       "tag.local": "Local only",
 
       "audio.scope": "Live waveform",
+      "audio.testHint": "Try the sound and latency first; capability rows below update automatically.",
       "audio.latencyShort": "Latency",
       "audio.sampleRateShort": "Sample rate",
       "audio.workletShort": "AudioWorklet",

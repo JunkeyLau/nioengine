@@ -91,10 +91,8 @@
             <h2 id="audioTitle" data-i18n="section.audio">音频能力</h2>
             <span class="card-tag" data-i18n="tag.tap">需要点击</span>
           </header>
-          <div id="audioRows" class="rows"></div>
-          <p class="hint small" data-i18n="audio.latencyNote">baseLatency / outputLatency 是浏览器上报值，不等于真实声学延迟；最终请用节拍器主观判断。</p>
-
           <div class="controls">
+            <p class="hint" data-i18n="audio.testHint">先试听声音和延迟，下面的能力数据会自动更新。</p>
             <div class="control-row">
               <label for="rpmRange" data-i18n="audio.rpm">转速</label>
               <output id="rpmOut">900 rpm</output>
@@ -124,6 +122,9 @@
               <button id="urlTestBtn" class="btn tiny ghost" type="button" data-i18n="audio.testUrl">测试同源 worklet.js</button>
             </div>
           </div>
+
+          <div id="audioRows" class="rows"></div>
+          <p class="hint small" data-i18n="audio.latencyNote">baseLatency / outputLatency 是浏览器上报值，不等于真实声学延迟；最终请用节拍器主观判断。</p>
         </section>
 
         <section class="card" aria-labelledby="displayTitle">
@@ -131,8 +132,6 @@
             <h2 id="displayTitle" data-i18n="section.display">显示与交互</h2>
             <span class="card-tag" data-i18n="tag.auto">自动采集</span>
           </header>
-          <div id="displayRows" class="rows"></div>
-
           <div class="controls">
             <div class="btn-row">
               <button id="fpsBtn" class="btn small" type="button" data-i18n="display.testFps">测试 3 秒帧率</button>
@@ -142,6 +141,8 @@
             <div id="fpsOut" class="status-line">未测试</div>
             <div id="displayStatus" class="status-line"></div>
           </div>
+
+          <div id="displayRows" class="rows"></div>
         </section>
 
         <section class="card" aria-labelledby="stabilityTitle">
