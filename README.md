@@ -48,7 +48,7 @@ Cloudflare 里连接 GitHub 后：
 | 配置项 | 值 |
 |---|---|
 | Build command | `npm run build:all` |
-| Deploy command | `npx wrangler deploy` |
+| Deploy command | `npm run deploy` |
 | Root directory | `/` |
 | Node version | `NODE_VERSION=22` |
 
