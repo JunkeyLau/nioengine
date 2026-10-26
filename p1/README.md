@@ -29,7 +29,7 @@ P1 版本：`0.2.0`。
 - Deploy command：`npx wrangler deploy`
 - Root directory：`/`
 
-部署后 P1 在 `/`，P0 能力探测在 `/p0/`。完整配置、自定义域名和排错见 **[docs/cloudflare-worker-deploy.md](../docs/cloudflare-worker-deploy.md)**。
+部署后 P1 在 `/`，P0 能力探测在 `/p0/`，P2.0 传感器探测在 `/sensors/`。完整配置、自定义域名和排错见 **[docs/cloudflare-worker-deploy.md](../docs/cloudflare-worker-deploy.md)**。
 
 #### 普通静态托管
 
@@ -45,7 +45,7 @@ P1 版本：`0.2.0`。
 - `engine-worklet.js` 是 Blob 加载失败时的同源备用路径，建议一起上传。
 - `.js` MIME 必须是 `application/javascript`。
 - 必须 HTTPS；非安全上下文下 Worklet 会被浏览器禁用，页面会退化为简单锯齿波。
-- P1 与 P0 可以部署在同一个域名下的不同路径（如 `/` 和 `/p0/`），互不影响。
+- P1、P0、P2.0 可以部署在同一个域名下的不同路径（`/`、`/p0/`、`/sensors/`），互不影响。
 
 Nginx 示例：
 

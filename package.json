@@ -3,15 +3,17 @@
   "version": "0.1.2",
   "private": true,
   "type": "module",
-  "description": "Engine Sound Lab — P1 cockpit + P0 capability probe",
+  "description": "Engine Sound Lab — P1 cockpit, P2 sensor probe, P0 capability probe",
   "scripts": {
     "build": "node build.mjs",
     "serve": "python3 -m http.server 4173 --directory dist",
     "build:p1": "node p1/build.mjs",
     "serve:p1": "python3 -m http.server 4174 --directory p1/dist",
-    "build:all": "npm run build:p1 && npm run build && node scripts/assemble.mjs",
+    "build:all": "npm run build:p1 && npm run build && npm run build:p2 && node scripts/assemble.mjs",
     "preview": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "build:p2": "node p2-probe/build.mjs",
+    "serve:p2": "python3 -m http.server 4177 --directory p2-probe/dist"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

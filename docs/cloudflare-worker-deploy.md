@@ -1,9 +1,10 @@
-# 用 Cloudflare Worker + GitHub 部署 P1 / P0
+# 用 Cloudflare Worker + GitHub 部署 P1 / P0 / P2
 
 这份配置把仓库变成一个 Worker：
 
 - `/` → **P1 声浪应用**
 - `/p0/` → **P0 能力探测**
+- `/sensors/` → **P2.0 传感器探测**
 - `/engine-worklet.js`、`/p0/worklet.js` → Worklet 备用文件
 - `/404.html` → 静态 404
 
@@ -14,7 +15,7 @@ Worker 在 `worker.mjs` 里给所有资源加 `Cache-Control: no-store`，避免
 ```text
 wrangler.jsonc              Worker / static assets 配置
 worker.mjs                  ASSETS 绑定 + no-store 包装
-scripts/assemble.mjs        把 P1、P0 构建结果组装到 public/
+scripts/assemble.mjs        把 P1、P0、P2 构建结果组装到 public/
 package.json                build:all / preview / deploy 脚本
 ```
 
@@ -32,16 +33,19 @@ npx wrangler dev
 
 - `http://localhost:8787/` → P1
 - `http://localhost:8787/p0/` → P0
+- `http://localhost:8787/sensors/` → P2.0 传感器探测
 
 `build:all` 会：
 
 1. 构建 P1 到 `p1/dist/`；
 2. 构建 P0 到 `dist/`；
-3. 组装 `public/`：
+3. 构建 P2.0 到 `p2-probe/dist/`；
+4. 组装 `public/`：
    - `public/index.html`（P1）
    - `public/engine-worklet.js`
    - `public/p0/index.html`（P0）
    - `public/p0/worklet.js`
+   - `public/sensors/index.html`（P2.0 传感器探测）
    - `public/404.html`
 
 `public/` 是构建产物，已加入 `.gitignore`；Cloudflare 构建时会重新生成。
@@ -129,10 +133,12 @@ npm install && npm run build:all
 
 ```text
 p1/**
+p2-probe/**
 src/**
 scripts/**
 build.mjs
 p1/build.mjs
+p2-probe/build.mjs
 wrangler.jsonc
 worker.mjs
 package.json
@@ -205,7 +211,7 @@ export default {
 https://<worker-name>.<your-subdomain>.workers.dev/
 ```
 
-确认 P1 和 `/p0/` 都能打开后，再绑域名。
+确认 P1、`/p0/` 和 `/sensors/` 都能打开后，再绑域名。
 
 **Worker → Settings → Domains & Routes → Add → Custom Domain**
 
@@ -228,6 +234,7 @@ curl -I https://nioengine.com/
 curl -I https://nioengine.com/engine-worklet.js
 curl -I https://nioengine.com/p0/
 curl -I https://nioengine.com/p0/worklet.js
+curl -I https://nioengine.com/sensors/
 ```
 
 期望：
@@ -236,6 +243,7 @@ curl -I https://nioengine.com/p0/worklet.js
 - `/engine-worklet.js` → 200，`content-type: application/javascript`
 - `/p0/` → 200，P0 页面
 - `/p0/worklet.js` → 200，`application/javascript`
+- `/sensors/` → 200，P2.0 传感器探测
 - 都带 `cache-control: no-store`
 
 浏览器/车机检查：
@@ -243,7 +251,8 @@ curl -I https://nioengine.com/p0/worklet.js
 1. `https://nioengine.com/` 打开 P1，启动发动机；
 2. 右上角诊断：Worklet = Pass / blob，AudioContext = running；
 3. `/p0/` 打开 P0，跑一次能力检测，确认 Worklet 仍通过；
-4. 车机刷新后应拿到新版本，不应被旧缓存卡住。
+4. `/sensors/` 打开 P2.0，允许位置/运动权限，确认 GPS 有定位、运动卡有数据；
+5. 车机刷新后应拿到新版本，不应被旧缓存卡住。
 
 ---
 
@@ -318,16 +327,17 @@ npm install && npm run build:all
 
 ---
 
-## 9. 只部署 P1 / 只部署 P0
+## 9. 只部署 P1 / 只部署 P0 / P2
 
 当前默认是：
 
 - P1 在 `/`
 - P0 在 `/p0/`
+- P2.0 在 `/sensors/`
 
 如果只想部署 P1：
 
-- 修改 `scripts/assemble.mjs`，去掉 P0 的 copy；
+- 修改 `scripts/assemble.mjs`，去掉 P0/P2 的 copy；
 - 或只上传 `p1/dist/index.html` + `p1/dist/engine-worklet.js` 到 static assets 目录。
 
 如果想把 P0 放根、P1 放 `/p1/`：

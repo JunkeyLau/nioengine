@@ -1,8 +1,9 @@
 # nioengine · 车机模拟声浪
 
-仓库包含两个单文件车机 Web 应用：
+仓库包含三个单文件车机 Web 应用：
 
 - **P1 声浪应用（当前）**：3 种发动机、4 种驾驶模式、虚拟驾驶、自动换挡、涡轮/回火/限转、诊断面板。
+- **P2.0 传感器探测（上车前）**：验证车机浏览器能否给出 GPS 速度、加速度和姿态；决定下一步是做 GPS+IMU 还是 GPS-only。
 - **P0 能力探测（保留）**：先用真车验证 HTTPS、AudioWorklet、延迟、音频焦点和 10 分钟长稳；结论见 [P0 真车结果](#p0-真车结果两次)。
 
 ---
@@ -33,7 +34,7 @@ npm run serve:p1     # http://127.0.0.1:4174
 
 - `wrangler.jsonc`：Worker + Static Assets 配置
 - `worker.mjs`：`ASSETS` 绑定 + `no-store`
-- `scripts/assemble.mjs`：把 P1 / P0 组装到 `public/`
+- `scripts/assemble.mjs`：把 P1 / P0 / P2 组装到 `public/`
 
 ```bash
 npm install
@@ -54,6 +55,7 @@ Cloudflare 里连接 GitHub 后：
 
 - `/` → P1
 - `/p0/` → P0 能力探测
+- `/sensors/` → P2.0 传感器探测
 - `/engine-worklet.js`、`/p0/worklet.js` → Worklet 备用文件
 
 完整步骤（Git 连接、自定义域名、排错）见 **[docs/cloudflare-worker-deploy.md](docs/cloudflare-worker-deploy.md)**。
@@ -63,6 +65,43 @@ Cloudflare 里连接 GitHub 后：
 把 `p1/dist/index.html` 和 `p1/dist/engine-worklet.js` 上传到同一个 HTTPS 目录，`.js` MIME 为 `application/javascript`。操作、架构和真车测试清单见 **[p1/README.md](p1/README.md)**。
 
 > P0 真车已知输出延迟约 **98 ms**（10 + 88）。P1 用连续虚拟驾驶和转速平滑弱化，但瞬时“踩下就轰”仍会略慢；这是车机音频 HAL 决定的，Worklet 不能降低。按你的要求，不走原生/OEM。
+
+---
+
+## P2.0 传感器探测（上车前）
+
+![P2 sensor probe](p2-probe/docs/probe-full-landscape.png)
+
+目标不是发声，而是先回答“车机浏览器到底能不能给出真实速度和加速度”：
+
+- GPS `coords.speed` 是否有值、精度、更新率；
+- `DeviceMotion` / `DeviceOrientation` 是否可用、事件率、轴向、重力；
+- Generic Sensor API（LinearAcceleration / Gyroscope / AbsoluteOrientation）是否可用；
+- 位置/运动权限、切后台恢复、隧道丢星；
+- 记录 5–10 分钟并导出 JSON，作为下一步 GPS+IMU 融合的依据。
+
+### 打开
+
+```text
+https://nioengine.com/sensors/
+```
+
+### 本地
+
+```bash
+npm run build:p2
+npm run serve:p2     # http://127.0.0.1:4177
+```
+
+### 测试
+
+1. 由副驾操作或停车设置；
+2. 请求位置/运动权限；
+3. 开始记录；
+4. 行驶 5–10 分钟：0/30/60/100 km/h、急加速、急刹、转弯、隧道；
+5. 停止并导出 JSON。
+
+详细说明、判定标准和报告字段见 **[p2-probe/README.md](p2-probe/README.md)**。
 
 ---
 
@@ -295,9 +334,10 @@ dist/              构建产物（已 gitignore）
 P1 已实现：3 种声浪、虚拟驾驶、自动换挡、车机 cockpit UI、诊断面板、中/英、全屏/常亮。下面是从 P0 到 P1 的原始路线：
 
 1. **P1 发声原型**：曲轴角 / 点火顺序驱动的发动机模型，启动 → 怠速 → 轰油门。
-2. **P2 声音设计**：负载音色、进排气、回火、涡轮、限转、换挡、车厢 IR，3 个预设。
-3. **P3 车机 UI**：虚拟驾驶 / 自动换挡、演示模式、横竖屏、全屏、安全提示。
-4. **P4 上车调音**：性能、降级、长时间稳定性、真车 A/B。
+2. **P2.0 传感器探测**：先验证车机浏览器能不能给出 GPS 速度、加速度和姿态。
+3. **P2 声音设计**：负载音色、进排气、回火、涡轮、限转、换挡、车厢 IR，3 个预设（已并入 P1 当前版本）。
+4. **P3 车机 UI**：虚拟驾驶 / 自动换挡、演示模式、横竖屏、全屏、安全提示。
+5. **P4 上车调音**：性能、降级、长时间稳定性、真车 A/B。
 
 下一步重点不是“能不能响”，而是**真车听感调音**：V8 低频是否被 ANC 削弱、I4 涡轮/回火是否自然、I6 高转是否够绵密、98 ms 延迟在行驶中是否可接受。
 

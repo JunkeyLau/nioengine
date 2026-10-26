@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05080c">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Nioengine P2.0 — in-car GPS and motion sensor probe">
+  <title>Engine Sound Lab · Sensors P2.0</title>
+  <!-- INLINE_STYLES -->
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">NIO<span>·</span>SENSORS <em>P2.0</em></div>
+      <div class="top-actions">
+        <span id="secureBadge" class="pill neutral">—</span>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" data-lang="zh" aria-pressed="true">中</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+        <a class="icon-btn" href="/" data-i18n="action.back">返回 P1</a>
+      </div>
+    </header>
+
+    <div class="notice" role="note">
+      <strong data-i18n="safety.title">安全提示</strong>
+      <span data-i18n="safety.body">请由乘客操作；行车中不要注视屏幕。本页会请求位置和运动传感器权限，数据只保存在本机，导出由你手动触发。</span>
+    </div>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">P2.0 · SENSOR PROBE</div>
+        <h1 data-i18n="hero.title">先确认车机能不能给出速度和加速度</h1>
+        <p class="lede" data-i18n="hero.body">允许位置与运动权限，开始记录后以 30–100 km/h 行驶，并做几次急加速/刹车。导出 JSON 后就能判断 GPS 速度、精度、更新率，以及加速度计是否可用。</p>
+        <div class="hero-actions">
+          <button id="startAll" class="btn primary" type="button" data-i18n="action.requestAll">请求全部权限</button>
+          <button id="recordBtn" class="btn" type="button" data-i18n="action.startRecord">开始记录</button>
+        </div>
+        <div id="statusLine" class="status-line" role="status" aria-live="polite">—</div>
+      </div>
+      <ol class="steps">
+        <li><span>1</span><b data-i18n="step.1">允许位置</b></li>
+        <li><span>2</span><b data-i18n="step.2">允许运动</b></li>
+        <li><span>3</span><b data-i18n="step.3">开始记录</b></li>
+        <li><span>4</span><b data-i18n="step.4">行驶 / 加速 / 刹车</b></li>
+        <li><span>5</span><b data-i18n="step.5">导出 JSON</b></li>
+      </ol>
+    </section>
+
+    <div class="grid">
+      <section class="card" aria-labelledby="geoTitle">
+        <header class="card-head">
+          <h2 id="geoTitle" data-i18n="geo.title">位置 / GPS 速度</h2>
+          <span id="geoStatus" class="pill neutral">—</span>
+        </header>
+        <div class="speed-big">
+          <strong id="geoKmh">—</strong>
+          <span>km/h</span>
+        </div>
+        <div id="geoSource" class="source" data-i18n="geo.sourceIdle">尚未开始定位</div>
+        <div id="geoRows" class="rows"></div>
+        <div class="btn-row">
+          <button id="geoStart" class="btn primary" type="button" data-i18n="geo.start">允许位置 / 开始定位</button>
+          <button id="geoStop" class="btn danger" type="button" data-i18n="action.stop" disabled>停止</button>
+        </div>
+        <p class="hint small" data-i18n="geo.hint">需要 HTTPS 和位置权限。开阔路段速度较好；隧道、地库可能丢失。</p>
+      </section>
+
+      <section class="card" aria-labelledby="motionTitle">
+        <header class="card-head">
+          <h2 id="motionTitle" data-i18n="motion.title">运动 / 加速度</h2>
+          <span id="motionStatus" class="pill neutral">—</span>
+        </header>
+        <div class="axes">
+          <div><span>X</span><strong id="ax">—</strong><small>m/s²</small></div>
+          <div><span>Y</span><strong id="ay">—</strong><small>m/s²</small></div>
+          <div><span>Z</span><strong id="az">—</strong><small>m/s²</small></div>
+        </div>
+        <div id="motionRows" class="rows"></div>
+        <div class="btn-row">
+          <button id="motionStart" class="btn primary" type="button" data-i18n="motion.start">允许运动 / 开始监听</button>
+          <button id="motionStop" class="btn danger" type="button" data-i18n="action.stop" disabled>停止</button>
+        </div>
+        <p class="hint small" data-i18n="motion.hint">车机不一定有加速度计；如果 X/Y/Z 一直为空，说明浏览器没有暴露传感器。</p>
+      </section>
+
+      <section class="card" aria-labelledby="orientTitle">
+        <header class="card-head">
+          <h2 id="orientTitle" data-i18n="orient.title">方向 / 姿态</h2>
+          <span id="orientStatus" class="pill neutral">—</span>
+        </header>
+        <div id="orientRows" class="rows"></div>
+        <div class="btn-row">
+          <button id="orientStart" class="btn primary" type="button" data-i18n="orient.start">允许方向 / 开始监听</button>
+          <button id="orientStop" class="btn danger" type="button" data-i18n="action.stop" disabled>停止</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="genericTitle">
+        <header class="card-head">
+          <h2 id="genericTitle" data-i18n="generic.title">Generic Sensor API</h2>
+          <span class="tag" data-i18n="tag.optional">可选</span>
+        </header>
+        <div id="genericSupport" class="rows"></div>
+        <div id="genericReadings" class="rows"></div>
+        <div id="genericActions" class="btn-row"></div>
+        <p class="hint small" data-i18n="generic.hint">Chrome 可能支持 LinearAccelerationSensor / Gyroscope / AbsoluteOrientationSensor；如果这里为空，不影响 DeviceMotion 的测试。</p>
+      </section>
+
+      <section class="card" aria-labelledby="recordTitle">
+        <header class="card-head">
+          <h2 id="recordTitle" data-i18n="record.title">记录</h2>
+          <span id="recordStatus" class="pill neutral">—</span>
+        </header>
+        <div class="stats">
+          <div><span data-i18n="record.elapsed">已记录</span><strong id="recordElapsed">00:00</strong></div>
+          <div><span data-i18n="record.geoCount">位置样本</span><strong id="geoCount">0</strong></div>
+          <div><span data-i18n="record.motionCount">运动样本</span><strong id="motionCount">0</strong></div>
+          <div><span data-i18n="record.orientCount">方向样本</span><strong id="orientCount">0</strong></div>
+        </div>
+        <div class="btn-row">
+          <button id="recordToggle" class="btn primary" type="button" data-i18n="action.startRecord">开始记录</button>
+          <button id="exportBtn" class="btn" type="button" data-i18n="action.export" disabled>导出 JSON</button>
+          <button id="copyBtn" class="btn ghost" type="button" data-i18n="action.copy" disabled>复制 JSON</button>
+          <button id="clearBtn" class="btn danger ghost" type="button" data-i18n="action.clear">清除</button>
+        </div>
+        <div id="recordSummary" class="summary" hidden></div>
+        <p class="hint small" data-i18n="record.hint">建议记录 5–10 分钟：0 / 30 / 60 / 100 km/h，急加速、急刹、转弯，以及一次隧道/地库。运动样本按约 25 Hz 抽样。</p>
+      </section>
+
+      <section class="card chart-card" aria-labelledby="chartTitle">
+        <header class="card-head">
+          <h2 id="chartTitle" data-i18n="chart.title">速度 / 加速度</h2>
+          <span class="tag" data-i18n="chart.window">最近 120 s</span>
+        </header>
+        <canvas id="chart" aria-hidden="true"></canvas>
+        <div class="legend"><i class="speed"></i><span data-i18n="chart.speed">速度</span><i class="accel"></i><span data-i18n="chart.accel">加速度</span></div>
+      </section>
+    </div>
+
+    <section class="card log-card" aria-labelledby="logTitle">
+      <header class="card-head">
+        <h2 id="logTitle" data-i18n="log.title">事件日志</h2>
+        <button id="clearLog" class="btn tiny ghost" type="button" data-i18n="log.clear">清空</button>
+      </header>
+      <div id="log" class="log"><div class="empty" data-i18n="log.empty">暂无事件</div></div>
+    </section>
+
+    <footer class="footer">
+      <span data-i18n="footer.left">Engine Sound Lab · P2.0 传感器探测</span>
+      <span id="buildInfo">—</span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script>window.P2_BUILD = { version: "__VERSION__", time: "__BUILD_TIME__" };</script>
+  <script>/*__I18N__*/</script>
+  <script>/*__APP__*/</script>
+</body>
+</html>

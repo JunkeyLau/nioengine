@@ -9,7 +9,8 @@ const required = [
   "p1/dist/index.html",
   "p1/dist/engine-worklet.js",
   "dist/index.html",
-  "dist/worklet.js"
+  "dist/worklet.js",
+  "p2-probe/dist/index.html"
 ];
 
 for (const file of required) {
@@ -20,6 +21,7 @@ for (const file of required) {
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, "p0"), { recursive: true });
+mkdirSync(join(out, "sensors"), { recursive: true });
 
 // P1 at the root.
 copyFileSync(join(root, "p1/dist/index.html"), join(out, "index.html"));
@@ -28,6 +30,9 @@ copyFileSync(join(root, "p1/dist/engine-worklet.js"), join(out, "engine-worklet.
 // P0 stays available at /p0/ for capability diagnostics.
 copyFileSync(join(root, "dist/index.html"), join(out, "p0/index.html"));
 copyFileSync(join(root, "dist/worklet.js"), join(out, "p0/worklet.js"));
+
+// P2.0 sensor capability probe.
+copyFileSync(join(root, "p2-probe/dist/index.html"), join(out, "sensors/index.html"));
 
 writeFileSync(
   join(out, "404.html"),
@@ -59,4 +64,5 @@ writeFileSync(
 console.log("Assembled Cloudflare assets in public/");
 console.log("  /              -> P1");
 console.log("  /p0/           -> P0 diagnostics");
+console.log("  /sensors/      -> P2.0 sensor probe");
 console.log("  /engine-worklet.js, /p0/worklet.js");
