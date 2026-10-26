@@ -11,7 +11,7 @@
     "serve:p1": "python3 -m http.server 4174 --directory p1/dist",
     "build:all": "npm run build:p1 && npm run build && npm run build:p2 && node scripts/assemble.mjs",
     "preview": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npx --yes wrangler deploy",
     "build:p2": "node p2-probe/build.mjs",
     "serve:p2": "python3 -m http.server 4177 --directory p2-probe/dist"
   },
