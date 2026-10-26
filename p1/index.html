@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05080c">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Engine Sound Lab P1 — virtual engine soundscape for the car cockpit">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b10'/%3E%3Cpath d='M12 40h8l5-17 6 26 5-21 4 12h12' fill='none' stroke='%23ff5a1f' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <title>Engine Sound Lab · P1</title>
+  <!-- INLINE_STYLES -->
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">NIO<span>·</span>ENGINE <em>P1</em></div>
+      <nav class="preset-tabs" id="presetTabs" aria-label="Engine preset">
+        <button type="button" data-preset="v8">V8 6.2</button>
+        <button type="button" data-preset="i4">I4 Turbo</button>
+        <button type="button" data-preset="i6">I6 3.0</button>
+      </nav>
+      <div class="top-actions">
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" data-lang="zh" aria-pressed="true">中</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+        <button id="fsBtn" class="icon-btn" type="button" data-i18n="ui.fullscreen">全屏</button>
+        <button id="diagBtn" class="icon-btn" type="button" data-i18n="ui.diagnostics">诊断</button>
+      </div>
+    </header>
+
+    <main class="cockpit">
+      <aside class="left-panel">
+        <div class="section-label" data-i18n="panel.mode">驾驶模式</div>
+        <div class="mode-list" id="modeList">
+          <button class="mode-btn" type="button" data-mode="neutral">
+            <span data-i18n="mode.neutral">空挡</span>
+            <small data-i18n="mode.neutralHint">轰油门</small>
+          </button>
+          <button class="mode-btn" type="button" data-mode="cruise">
+            <span data-i18n="mode.cruise">巡航</span>
+            <small data-i18n="mode.cruiseHint">自动 80 km/h</small>
+          </button>
+          <button class="mode-btn" type="button" data-mode="manual">
+            <span data-i18n="mode.manual">手动</span>
+            <small data-i18n="mode.manualHint">自己踩</small>
+          </button>
+          <button class="mode-btn" type="button" data-mode="demo">
+            <span data-i18n="mode.demo">演示</span>
+            <small data-i18n="mode.demoHint">自动换挡</small>
+          </button>
+        </div>
+
+        <div class="engine-actions">
+          <button id="startBtn" class="btn primary wide" type="button" data-i18n="engine.start">启动发动机</button>
+          <button id="stopBtn" class="btn danger wide" type="button" data-i18n="engine.stop" hidden>熄火</button>
+        </div>
+
+        <div class="section-label" data-i18n="panel.controls">控制</div>
+        <button id="valveBtn" class="btn ghost wide" type="button" data-i18n="valve.closed">排气阀门：关</button>
+        <button id="wakeBtn" class="btn ghost wide" type="button" data-i18n="wake.off">保持屏幕常亮</button>
+
+        <div class="volume-row">
+          <label for="volRange" data-i18n="ui.volume">音量</label>
+          <output id="volOut">40%</output>
+        </div>
+        <input id="volRange" class="range" type="range" min="0" max="100" step="1" value="40">
+      </aside>
+
+      <section class="cluster" aria-label="Instrument cluster">
+        <div class="cluster-head">
+          <span id="presetName" class="cluster-preset">V8 6.2</span>
+          <span id="engineState" class="cluster-state">未启动</span>
+        </div>
+
+        <div class="tach-wrap">
+          <canvas id="tach" aria-hidden="true"></canvas>
+          <div class="tach-center">
+            <div id="gear" class="gear">N</div>
+            <div class="gear-label" data-i18n="dash.gear">档位</div>
+            <div class="speed"><strong id="speed">0</strong><span>km/h</span><em>SIM</em></div>
+            <div id="modeName" class="mode-name">空挡</div>
+          </div>
+          <div class="shift-lights" id="shiftLights" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+
+        <div class="cluster-stats">
+          <div><span data-i18n="dash.rpm">转速</span><strong id="rpmText">0</strong><small>rpm</small></div>
+          <div><span data-i18n="dash.speed">车速</span><strong id="speedText">0</strong><small>km/h</small></div>
+          <div><span data-i18n="dash.throttle">油门</span><strong id="throttleText">0</strong><small>%</small></div>
+          <div id="boostStat"><span data-i18n="dash.boost">涡轮</span><strong id="boostText">0</strong><small>%</small></div>
+        </div>
+      </section>
+
+      <aside class="right-panel">
+        <div class="pedals">
+          <button id="brakePedal" class="pedal brake" type="button">
+            <i class="fill"></i>
+            <span data-i18n="pedal.brake">刹车</span>
+            <small>BRAKE</small>
+          </button>
+          <button id="throttlePedal" class="pedal throttle" type="button">
+            <i class="fill"></i>
+            <span data-i18n="pedal.throttle">油门</span>
+            <small>THROTTLE</small>
+          </button>
+        </div>
+        <div id="pedalHint" class="pedal-hint" data-i18n="pedal.hold">按住油门 / 刹车</div>
+
+        <div class="bars">
+          <div class="bar-row"><span data-i18n="dash.throttle">油门</span><div class="bar"><i id="throttleBar"></i></div><b id="throttlePct">0%</b></div>
+          <div class="bar-row"><span data-i18n="dash.brake">刹车</span><div class="bar"><i id="brakeBar"></i></div><b id="brakePct">0%</b></div>
+          <div class="bar-row" id="boostRow"><span data-i18n="dash.boost">涡轮</span><div class="bar"><i id="boostBar"></i></div><b id="boostPct">0%</b></div>
+        </div>
+
+        <div class="right-status">
+          <div><span data-i18n="dash.gear">档位</span><strong id="gearText">N</strong></div>
+          <div><span data-i18n="dash.mode">模式</span><strong id="modeText">空挡</strong></div>
+          <div><span data-i18n="dash.exhaust">排气</span><strong id="valveText">关</strong></div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="bottombar">
+      <span id="audioStatus">音频未初始化</span>
+      <span id="hint" class="hint" data-i18n="hint.off">点击启动发动机，开始模拟声浪</span>
+      <button id="panicBtn" class="btn small danger panic-inline" type="button" data-i18n="engine.panic" hidden>■ 停止</button>
+      <span id="latencyBadge" class="badge">—</span>
+    </footer>
+  </div>
+
+  <div id="startOverlay" class="overlay">
+    <div class="overlay-card">
+      <div class="overlay-top">
+        <span class="eyebrow" data-i18n="overlay.eyebrow">P1 · ENGINE SOUND</span>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" data-lang="zh" aria-pressed="true">中</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+      </div>
+      <h1 data-i18n="overlay.title">让车机发出属于你的声浪</h1>
+      <p class="overlay-lede" data-i18n="overlay.body">三种发动机、虚拟驾驶、自动换挡。不读取车辆数据，也不会上传任何内容。</p>
+
+      <div class="section-label" data-i18n="overlay.choose">选择声浪</div>
+      <div class="preset-cards" id="presetCards"></div>
+
+      <div class="overlay-actions">
+        <button id="overlayStart" class="btn primary" type="button" data-i18n="overlay.start">启动发动机</button>
+        <button id="overlayDemo" class="btn ghost" type="button" data-i18n="overlay.demo">一键演示</button>
+      </div>
+
+      <p class="overlay-note" data-i18n="overlay.safety">请在驻车或由乘客操作时使用；行车中请勿注视屏幕。模拟声浪不改变车辆状态。</p>
+      <div class="overlay-foot">
+        <span data-i18n="overlay.foot">虚拟车速 · 仅用于声浪体验</span>
+        <span id="overlayVersion">P1</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="diagPanel" class="drawer" hidden>
+    <div class="drawer-card">
+      <header>
+        <h2 data-i18n="diag.title">音频诊断</h2>
+        <button id="diagClose" class="icon-btn" type="button" aria-label="Close">×</button>
+      </header>
+      <div id="diagRows" class="diag-rows"></div>
+      <div class="drawer-actions">
+        <button id="diagCopy" class="btn small ghost" type="button" data-i18n="diag.copy">复制诊断 JSON</button>
+      </div>
+      <p class="hint small" data-i18n="diag.note">延迟为浏览器上报值，不是声学实测；最终以听感为准。</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script>window.P1_BUILD = { version: "__VERSION__", time: "__BUILD_TIME__" };</script>
+  <script type="text/plain" id="worklet-source">/*__WORKLET__*/</script>
+  <script>/*__I18N__*/</script>
+  <script>/*__APP__*/</script>
+</body>
+</html>

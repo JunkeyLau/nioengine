@@ -6,6 +6,8 @@
   "description": "Engine Sound Lab P0 — in-car browser audio capability probe",
   "scripts": {
     "build": "node build.mjs",
-    "serve": "python3 -m http.server 4173 --directory dist"
+    "serve": "python3 -m http.server 4173 --directory dist",
+    "build:p1": "node p1/build.mjs",
+    "serve:p1": "python3 -m http.server 4174 --directory p1/dist"
   }
 }
