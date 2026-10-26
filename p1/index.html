@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05080c">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Engine Sound Lab P1 — virtual engine soundscape for the car cockpit">
+  <meta name="description" content="Engine Sound Lab P1 — GPS and virtual engine soundscape for the car cockpit">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b10'/%3E%3Cpath d='M12 40h8l5-17 6 26 5-21 4 12h12' fill='none' stroke='%23ff5a1f' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <title>Engine Sound Lab · P1</title>
   <!-- INLINE_STYLES -->
@@ -49,11 +49,29 @@
             <span data-i18n="mode.demo">演示</span>
             <small data-i18n="mode.demoHint">自动换挡</small>
           </button>
+          <button class="mode-btn" type="button" data-mode="gps">
+            <span data-i18n="mode.gps">GPS</span>
+            <small data-i18n="mode.gpsHint">真实车速</small>
+          </button>
         </div>
 
         <div class="engine-actions">
           <button id="startBtn" class="btn primary wide" type="button" data-i18n="engine.start">启动发动机</button>
           <button id="stopBtn" class="btn danger wide" type="button" data-i18n="engine.stop" hidden>熄火</button>
+        </div>
+
+        <div id="gpsPanel" class="gps-panel" hidden>
+          <div class="gps-panel-head">
+            <span data-i18n="gps.title">GPS 车速</span>
+            <span id="gpsState" class="badge">—</span>
+          </div>
+          <div class="gps-panel-speed">
+            <strong id="gpsSpeed">—</strong>
+            <small>km/h</small>
+            <span id="gpsAccuracy">—</span>
+          </div>
+          <div id="gpsMeta" class="gps-meta">—</div>
+          <button id="gpsRetry" class="btn ghost small wide" type="button" data-i18n="gps.retry">重新连接 GPS</button>
         </div>
 
         <div class="section-label" data-i18n="panel.controls">控制</div>
@@ -70,6 +88,7 @@
       <section class="cluster" aria-label="Instrument cluster">
         <div class="cluster-head">
           <span id="presetName" class="cluster-preset">V8 6.2</span>
+          <span id="gpsBadge" class="badge" hidden>GPS</span>
           <span id="engineState" class="cluster-state">未启动</span>
         </div>
 
@@ -78,7 +97,7 @@
           <div class="tach-center">
             <div id="gear" class="gear">N</div>
             <div class="gear-label" data-i18n="dash.gear">档位</div>
-            <div class="speed"><strong id="speed">0</strong><span>km/h</span><em>SIM</em></div>
+            <div class="speed"><strong id="speed">0</strong><span>km/h</span><em id="speedSource">SIM</em></div>
             <div id="modeName" class="mode-name">空挡</div>
           </div>
           <div class="shift-lights" id="shiftLights" aria-hidden="true">
@@ -148,6 +167,7 @@
 
       <div class="overlay-actions">
         <button id="overlayStart" class="btn primary" type="button" data-i18n="overlay.start">启动发动机</button>
+        <button id="overlayGps" class="btn ghost" type="button" data-i18n="overlay.gps">GPS 驱动</button>
         <button id="overlayDemo" class="btn ghost" type="button" data-i18n="overlay.demo">一键演示</button>
       </div>
 

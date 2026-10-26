@@ -1,5 +1,5 @@
 /* Engine Sound Lab — P1 cockpit.
-   Virtual drivetrain + crank-angle engine sound synth. No vehicle signals. */
+   Virtual drivetrain + optional GPS speed + crank-angle engine sound synth. */
 (function () {
   "use strict";
 
@@ -9,6 +9,9 @@
   var VOLUME_KEY = "nioengine.p1.volume";
   var PRESET_KEY = "nioengine.p1.preset";
   var VALVE_KEY = "nioengine.p1.valve";
+  var GPS_STALE_MS = 2000;
+  var GPS_FADE_START_MS = 5000;
+  var GPS_FADE_END_MS = 9000;
 
   var PRESETS = {
     v8: {
@@ -183,6 +186,33 @@
       limiterCut: false,
       cruiseIntegral: 0,
       demoStart: 0
+    },
+    gps: {
+      supported: !!(navigator.geolocation),
+      secure: !!window.isSecureContext,
+      watching: false,
+      watchId: null,
+      permission: "unknown",
+      error: null,
+      lastFixAt: 0,
+      lastWall: 0,
+      intervalMs: null,
+      speedMps: null,
+      accuracy: null,
+      heading: null,
+      source: "none",
+      accel1: 0,
+      accel2: 0,
+      accelSmooth: 0,
+      confidence: 0,
+      fixes: 0,
+      gaps: 0,
+      lastGapMs: 0,
+      history: [],
+      lastPos: null,
+      lastSpeedMps: null,
+      uiStatus: "idle",
+      rejected: 0
     },
     timers: { start: 0, stop: 0 },
     volume: 0.4,
@@ -816,17 +846,23 @@
 
   async function startEngine(mode) {
     if (state.busy || state.engine !== "off") return false;
+    if (state.gps.watching) stopGps(true);
     state.busy = true;
     updateOverlayButtons();
     updateDisplay();
     showToast(t("toast.workletInit"), 1600);
     requestWakeLock(true);
 
+    // Start the GPS watch before the first await so the click's user
+    // activation is still valid when the location permission prompt appears.
+    if (mode === "gps") startGps(true);
+
     try {
       await ensureAudio();
     } catch (err) {
       state.audioError = String(err);
       state.busy = false;
+      stopGps(true);
       releaseWakeLock(true);
       updateOverlayButtons();
       updateDisplay();
@@ -837,6 +873,7 @@
     if (!state.worklet && !state.fallback) {
       state.audioError = state.workletError || t("audio.workletError");
       state.busy = false;
+      stopGps(true);
       releaseWakeLock(true);
       updateOverlayButtons();
       updateDisplay();
@@ -883,6 +920,7 @@
       state.audioError = String(err);
       state.engine = "off";
       state.busy = false;
+      stopGps(true);
       releaseWakeLock(true);
       updateOverlayButtons();
       updateDisplay();
@@ -900,6 +938,7 @@
 
   function stopEngine() {
     if (state.engine === "off" || state.engine === "stopping") return;
+    stopGps(true);
     state.engine = "stopping";
     state.timers.stop = 0.9;
     state.timers.start = 0;
@@ -949,6 +988,7 @@
         state.drive.shiftTimer = 0;
         state.displayRpm = 0;
         state.telemetry.rpm = 0;
+        stopGps(true);
         stopFallback();
         releaseWakeLock(true);
         showToast(t("toast.engineStopped"), 2200);
@@ -983,6 +1023,435 @@
     return clamp(0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, x / 1.6)), 0.3, 1.02);
   }
 
+  /* ------------------------------------------------------------------ */
+  /* GPS speed source                                                   */
+  /* ------------------------------------------------------------------ */
+
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371000;
+    var dLat = ((lat2 - lat1) * Math.PI) / 180;
+    var dLon = ((lon2 - lon1) * Math.PI) / 180;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function gpsStatusKey() {
+    var g = state.gps;
+    if (!g.supported) return "unsupported";
+    if (g.permission === "denied") return "denied";
+    if (g.error) return "error";
+    if (!g.lastFixAt) return "waiting";
+    var age = performance.now() - g.lastFixAt;
+    if (document.visibilityState === "hidden") return "lost";
+    if (age > GPS_FADE_START_MS) return "lost";
+    if (age > GPS_STALE_MS) return "weak";
+    return "active";
+  }
+
+  function gpsStatusKind(key) {
+    if (key === "active") return "ok";
+    if (key === "waiting" || key === "weak") return "warn";
+    return "bad";
+  }
+
+  function gpsStatusText() {
+    return t("gps." + gpsStatusKey());
+  }
+
+  function gpsSlope(seconds, now) {
+    var h = state.gps.history;
+    if (h.length < 2) return null;
+    var target = now - seconds * 1000;
+    var ref = h[0];
+    for (var i = h.length - 1; i >= 0; i--) {
+      if (h[i].t <= target) {
+        ref = h[i];
+        break;
+      }
+    }
+    var dt = (now - ref.t) / 1000;
+    if (dt < seconds * 0.55 || dt > seconds * 2.5) return null;
+    return (h[h.length - 1].speed - ref.speed) / dt;
+  }
+
+  function applyGpsSample(speedMps, accuracy, heading, now, source) {
+    var g = state.gps;
+    if (!isFinite(speedMps) || speedMps < 0) return false;
+    speedMps = clamp(speedMps, 0, 90);
+
+    var dt = g.lastFixAt ? (now - g.lastFixAt) / 1000 : 0;
+    if (g.lastSpeedMps !== null && dt > 0.15 && dt < 2.0) {
+      var maxDelta = Math.max(3.0, dt * 5.0);
+      var limited = clamp(speedMps, g.lastSpeedMps - maxDelta, g.lastSpeedMps + maxDelta);
+      if (Math.abs(limited - speedMps) > 0.01) g.rejected++;
+      speedMps = limited;
+    }
+
+    g.fixes += 1;
+    g.watching = true;
+    g.permission = "granted";
+    g.error = null;
+    g.lastFixAt = now;
+    g.lastWall = Date.now();
+    g.intervalMs = dt > 0 ? dt * 1000 : null;
+    g.speedMps = speedMps;
+    g.lastSpeedMps = speedMps;
+    g.accuracy = typeof accuracy === "number" && isFinite(accuracy) ? accuracy : null;
+    g.heading = typeof heading === "number" && isFinite(heading) ? heading : null;
+    g.source = source || "gps";
+
+    if (dt > 2.0) {
+      g.gaps += 1;
+      g.lastGapMs = dt * 1000;
+      g.history = [];
+      g.accel1 = 0;
+      g.accel2 = 0;
+    }
+    g.history.push({ t: now, speed: speedMps });
+    while (g.history.length && now - g.history[0].t > 5000) g.history.shift();
+
+    if (dt > 2.0) {
+      g.accel1 = 0;
+      g.accel2 = 0;
+    } else {
+      var a1 = gpsSlope(1.0, now);
+      var a2 = gpsSlope(2.0, now);
+      g.accel1 = a1 === null ? 0 : clamp(a1, -4, 4);
+      g.accel2 = a2 === null ? 0 : clamp(a2, -4, 4);
+    }
+
+    var acc = g.accuracy === null ? 10 : g.accuracy;
+    g.confidence = clamp(1 - Math.max(0, acc - 2) / 12, 0.2, 1);
+
+    if (state.mode === "gps" && state.engine === "running" &&
+        (state.drive.gear < 1 || state.drive.speed < 0.5)) {
+      state.drive.gear = gpsInitialGear(speedMps);
+    }
+    if (g.fixes === 1) showToast(t("toast.gpsReady"), 2200);
+    updateDisplay();
+    return true;
+  }
+
+  function onGpsFix(position) {
+    var g = state.gps;
+    var c = position.coords;
+    var now = performance.now();
+    var ts = position.timestamp || Date.now();
+    var gpsSpeed = typeof c.speed === "number" && isFinite(c.speed) ? c.speed : null;
+    var derived = null;
+
+    if (g.lastPos && ts > g.lastPos.ts) {
+      var dtPos = (ts - g.lastPos.ts) / 1000;
+      if (dtPos >= 0.5 && dtPos < 15 && (c.accuracy === null || c.accuracy === undefined || c.accuracy < 100)) {
+        var distance = haversine(g.lastPos.lat, g.lastPos.lon, c.latitude, c.longitude);
+        derived = distance / dtPos;
+      }
+    }
+
+    g.lastPos = {
+      lat: c.latitude,
+      lon: c.longitude,
+      ts: ts
+    };
+
+    var speed = gpsSpeed !== null ? gpsSpeed : derived;
+    if (speed === null) {
+      g.error = t("gps.noSpeed");
+      g.watching = true;
+      updateDisplay();
+      return;
+    }
+    applyGpsSample(speed, c.accuracy, c.heading, now, gpsSpeed !== null ? "gps" : "derived");
+  }
+
+  function onGpsError(error) {
+    var g = state.gps;
+    var message = error && error.message ? error.message : "GPS error";
+    g.error = message;
+    if (error && error.code === 1) {
+      g.permission = "denied";
+      g.watching = false;
+      if (g.watchId !== null) {
+        try { navigator.geolocation.clearWatch(g.watchId); } catch (err) { /* ignore */ }
+        g.watchId = null;
+      }
+      showToast(t("toast.gpsDenied"), 3800);
+    } else {
+      showToast(t("toast.gpsError", { error: message }), 3800);
+    }
+    updateDisplay();
+  }
+
+  function startGps(silent) {
+    var g = state.gps;
+    if (g.watching) return true;
+    if (!g.supported) {
+      g.error = t("toast.gpsUnsupported");
+      showToast(t("toast.gpsUnsupported"), 3400);
+      updateDisplay();
+      return false;
+    }
+    if (!g.secure) {
+      g.error = t("toast.gpsSecure");
+      showToast(t("toast.gpsSecure"), 3800);
+      updateDisplay();
+      return false;
+    }
+
+    g.error = null;
+    g.permission = "prompt";
+    g.lastFixAt = 0;
+    g.lastWall = 0;
+    g.intervalMs = null;
+    g.speedMps = null;
+    g.lastSpeedMps = null;
+    g.accuracy = null;
+    g.heading = null;
+    g.source = "none";
+    g.accel1 = 0;
+    g.accel2 = 0;
+    g.accelSmooth = 0;
+    g.confidence = 0;
+    g.fixes = 0;
+    g.gaps = 0;
+    g.lastGapMs = 0;
+    g.history = [];
+    g.lastPos = null;
+    g.rejected = 0;
+    g.uiStatus = "waiting";
+
+    try {
+      g.watchId = navigator.geolocation.watchPosition(
+        onGpsFix,
+        onGpsError,
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      );
+      g.watching = true;
+      if (!silent) showToast(t("toast.gpsWaiting"), 2600);
+    } catch (err) {
+      g.error = String(err);
+      g.watching = false;
+      showToast(t("toast.gpsError", { error: String(err) }), 3800);
+    }
+    updateDisplay();
+    return g.watching;
+  }
+
+  function stopGps(silent) {
+    var g = state.gps;
+    if (g.watchId !== null) {
+      try { navigator.geolocation.clearWatch(g.watchId); } catch (err) { /* ignore */ }
+    }
+    g.watchId = null;
+    g.watching = false;
+    g.lastFixAt = 0;
+    g.lastWall = 0;
+    g.intervalMs = null;
+    g.speedMps = null;
+    g.lastSpeedMps = null;
+    g.accuracy = null;
+    g.heading = null;
+    g.source = "none";
+    g.accel1 = 0;
+    g.accel2 = 0;
+    g.accelSmooth = 0;
+    g.confidence = 0;
+    g.history = [];
+    g.lastPos = null;
+    g.error = null;
+    g.uiStatus = "idle";
+    updateDisplay();
+  }
+
+  function restartGps() {
+    stopGps(true);
+    startGps(false);
+  }
+
+  function gpsInitialGear(speedMps) {
+    if (speedMps < 0.5) return 1;
+    var cfg = state.preset.drive;
+    var fallback = 1;
+    for (var g = 1; g <= cfg.gears.length; g++) {
+      var rpm = rpmFromSpeed(speedMps, g, cfg);
+      if (rpm >= 2000 && rpm <= 4800) return g;
+      if (rpm < 2000) fallback = g;
+    }
+    return fallback;
+  }
+
+  function updateGpsDrive(dt, now) {
+    var d = state.drive;
+    var p = state.preset;
+    var cfg = p.drive;
+    var g = state.gps;
+    var age = g.lastFixAt ? now - g.lastFixAt : 999999;
+    var hidden = document.visibilityState === "hidden";
+    var fade = 1;
+
+    if (age > GPS_FADE_START_MS) {
+      fade = clamp(1 - (age - GPS_FADE_START_MS) / (GPS_FADE_END_MS - GPS_FADE_START_MS), 0, 1);
+    }
+    if (hidden && age > 1000) {
+      fade = Math.min(fade, clamp(1 - (age - 1000) / 2500, 0, 1));
+    }
+
+    var stale = age > GPS_STALE_MS || g.speedMps === null;
+    var targetSpeed = (g.speedMps === null ? 0 : g.speedMps) * fade;
+    targetSpeed = Math.min(targetSpeed, cfg.topKmh / 3.6);
+    var speedK = 1 - Math.exp(-dt / (stale ? 0.45 : 0.10));
+    d.speed += (targetSpeed - d.speed) * speedK;
+    if (d.speed < 0.03) d.speed = 0;
+
+    var accelTarget = stale ? 0 : (g.accel1 * 0.7 + g.accel2 * 0.3) * fade;
+    g.accelSmooth += (accelTarget - g.accelSmooth) * (1 - Math.exp(-dt / 0.12));
+
+    var acc = g.accuracy === null ? 10 : g.accuracy;
+    g.confidence = clamp(1 - Math.max(0, acc - 2) / 12, 0.2, 1) * clamp(1 - age / 8000, 0, 1);
+    if (stale) g.confidence = Math.min(g.confidence, 0.3);
+    if (hidden) g.confidence = Math.min(g.confidence, 0.15);
+
+    d.shiftCooldown = Math.max(0, d.shiftCooldown - dt);
+    d.limiterCut = false;
+    if (d.shiftTimer > 0) d.shiftTimer -= dt;
+
+    var targetThrottle = 0;
+    if (d.speed > 0.6 && !stale) {
+      if (g.accelSmooth > 0.12) targetThrottle = clamp(0.06 + g.accelSmooth * 0.35, 0, 1);
+      else targetThrottle = 0.045;
+      if (g.accelSmooth < -0.15) targetThrottle = 0;
+    }
+    var targetBrake = d.speed > 0.6 ? clamp(-g.accelSmooth / 3.2, 0, 1) : 0;
+    d.throttle += (targetThrottle - d.throttle) * (1 - Math.exp(-dt / 0.16));
+    d.brake += (targetBrake - d.brake) * (1 - Math.exp(-dt / 0.18));
+
+    if (d.speed < 0.6) {
+      d.gear = 1;
+      d.rpm += (p.idle - d.rpm) * (1 - Math.exp(-dt / 0.15));
+      d.load = 0;
+      d.throttle = 0;
+      d.brake = 0;
+      d.boost = 0;
+      d.limiterCut = false;
+    } else {
+      if (d.gear < 1) d.gear = gpsInitialGear(d.speed);
+
+      var rpmWheel = rpmFromSpeed(d.speed, d.gear, cfg);
+      if (d.shiftTimer <= 0) {
+        var loadForShift = clamp(0.35 + Math.max(g.accelSmooth, 0) * 0.3, 0, 1);
+        var upRpm = cfg.shiftUp * (0.55 + 0.45 * loadForShift);
+        var downRpm = cfg.shiftDown;
+        if (rpmWheel > upRpm && d.gear < cfg.gears.length && d.shiftCooldown <= 0) {
+          d.gear += 1;
+          d.shiftTimer = 0.16;
+          d.shiftCooldown = 0.55;
+          d.load = 0;
+          d.throttle = 0;
+        } else if (rpmWheel < downRpm && d.gear > 1 && d.shiftCooldown <= 0) {
+          d.gear -= 1;
+          d.shiftTimer = 0.12;
+          d.shiftCooldown = 0.65;
+          d.load = 0;
+          d.throttle = 0;
+        }
+      }
+
+      var targetRpm = Math.max(p.idle, rpmFromSpeed(d.speed, d.gear, cfg));
+      d.rpm += (targetRpm - d.rpm) * (1 - Math.exp(-dt / 0.08));
+
+      if (d.shiftTimer > 0 || stale) {
+        d.load = 0;
+        d.throttle = 0;
+      } else if (g.accelSmooth < -0.15) {
+        d.load = 0;
+      } else {
+        d.load = d.throttle;
+      }
+
+      if (d.rpm > p.limiter - 80) {
+        d.limiterCut = true;
+        d.load = 0;
+        d.rpm = Math.min(d.rpm, p.limiter);
+        d.throttle = Math.min(d.throttle, 0.25);
+      }
+
+      if (p.turbo) {
+        var bt = d.load > 0.05 && d.rpm > 1500
+          ? clamp(d.load * 0.75 + (d.rpm / p.redline) * 0.25, 0, 1)
+          : 0;
+        d.boost += (bt - d.boost) * (1 - Math.exp(-dt / 0.25));
+      } else {
+        d.boost = 0;
+      }
+    }
+
+    if (fade < 1) {
+      d.throttle *= fade;
+      d.load *= fade;
+      d.boost *= fade;
+    }
+  }
+
+  function renderGpsUi() {
+    var g = state.gps;
+    var active = state.mode === "gps" && state.engine !== "off";
+    if (els.speedSource) {
+      els.speedSource.textContent = active ? "GPS" : "SIM";
+      els.speedSource.classList.toggle("gps", active);
+    }
+    if (els.gpsPanel) els.gpsPanel.hidden = !active;
+    if (els.gpsBadge) els.gpsBadge.hidden = !active;
+    if (!active) return;
+
+    var status = gpsStatusKey();
+    var kind = gpsStatusKind(status);
+    if (els.gpsState) {
+      els.gpsState.textContent = gpsStatusText();
+      els.gpsState.className = "badge " + kind;
+    }
+    if (els.gpsBadge) {
+      els.gpsBadge.textContent = "GPS · " + gpsStatusText();
+      els.gpsBadge.className = "badge " + kind;
+    }
+    if (els.gpsSpeed) {
+      els.gpsSpeed.textContent = g.speedMps === null ? "—" : (g.speedMps * 3.6).toFixed(1);
+    }
+    if (els.gpsAccuracy) {
+      els.gpsAccuracy.textContent = g.accuracy === null
+        ? "—"
+        : t("gps.accuracyValue", { accuracy: g.accuracy.toFixed(1) });
+    }
+    if (els.gpsMeta) {
+      if (!g.lastFixAt) {
+        els.gpsMeta.textContent = g.error || t("gps.waiting");
+      } else {
+        var age = performance.now() - g.lastFixAt;
+        var source = g.source === "derived" ? t("gps.sourceDerived") : t("gps.sourceGps");
+        var meta = t("gps.meta", {
+          accuracy: g.accuracy === null ? "—" : t("gps.accuracyValue", { accuracy: g.accuracy.toFixed(1) }),
+          interval: g.intervalMs === null ? "—" : t("gps.intervalValue", { interval: Math.round(g.intervalMs) }),
+          source: source
+        });
+        if (age > GPS_STALE_MS) meta += " · " + t("gps.ageValue", { age: (age / 1000).toFixed(1) });
+        els.gpsMeta.textContent = meta;
+      }
+    }
+    if (els.gpsRetry) els.gpsRetry.disabled = !g.supported;
+
+    if (g.uiStatus !== status) {
+      if (status === "lost" && (g.uiStatus === "active" || g.uiStatus === "weak")) {
+        showToast(t("toast.gpsLost"), 2800);
+      } else if (status === "active" && (g.uiStatus === "lost" || g.uiStatus === "weak") && g.fixes > 1) {
+        showToast(t("toast.gpsReady"), 1800);
+      }
+      g.uiStatus = status;
+    }
+  }
+
   function autoTargets(now, dt) {
     var d = state.drive;
     var targetSpeed = 0;
@@ -1013,6 +1482,10 @@
   }
 
   function updateDrive(dt, now) {
+    if (state.mode === "gps") {
+      updateGpsDrive(dt, now);
+      return;
+    }
     var d = state.drive;
     var p = state.preset;
     var cfg = p.drive;
@@ -1143,14 +1616,27 @@
       showToast(t("toast.startFirst"), 2400);
       return;
     }
-    if (mode === state.mode) return;
+    if (mode === state.mode) {
+      if (mode === "gps" && !state.gps.watching) startGps(false);
+      return;
+    }
+
+    if (mode !== "gps" && state.gps.watching) stopGps(true);
+
     state.mode = mode;
     state.drive.cruiseIntegral = 0;
+    state.drive.shiftTimer = 0;
+    state.drive.shiftCooldown = 0;
+    state.drive.limiterCut = false;
     state.ui.throttleHeld = false;
     state.ui.brakeHeld = false;
 
     if (mode === "neutral") {
       state.drive.gear = 0;
+    } else if (mode === "gps") {
+      var gpsSpeed = state.gps.speedMps !== null ? state.gps.speedMps : state.drive.speed;
+      state.drive.gear = gpsInitialGear(gpsSpeed);
+      startGps(true);
     } else if (state.drive.gear === 0) {
       state.drive.gear = gearForSpeed(state.drive.speed);
       if (state.drive.speed < 0.5) state.drive.gear = 1;
@@ -1321,11 +1807,11 @@
     var canPedal = running && (state.mode === "manual" || state.mode === "neutral");
     if (els.throttlePedal) {
       els.throttlePedal.disabled = !canPedal;
-      els.throttlePedal.classList.toggle("auto", running && (state.mode === "cruise" || state.mode === "demo"));
+      els.throttlePedal.classList.toggle("auto", running && (state.mode === "cruise" || state.mode === "demo" || state.mode === "gps"));
     }
     if (els.brakePedal) {
       els.brakePedal.disabled = !canPedal;
-      els.brakePedal.classList.toggle("auto", running && (state.mode === "cruise" || state.mode === "demo"));
+      els.brakePedal.classList.toggle("auto", running && (state.mode === "cruise" || state.mode === "demo" || state.mode === "gps"));
     }
 
     var modeButtons = document.querySelectorAll("#modeList [data-mode]");
@@ -1347,6 +1833,8 @@
     if (els.panicBtn) els.panicBtn.hidden = state.engine === "off";
 
     if (els.presetTabs) els.presetTabs.classList.toggle("locked", state.engine !== "off");
+
+    if (els.gpsRetry) els.gpsRetry.addEventListener("click", restartGps);
 
     if (els.valveBtn) {
       els.valveBtn.textContent = state.valve ? t("valve.open") : t("valve.closed");
@@ -1370,6 +1858,7 @@
 
     if (els.pedalHint) {
       if (!running) els.pedalHint.textContent = t("pedal.off");
+      else if (state.mode === "gps") els.pedalHint.textContent = t("pedal.gps");
       else if (state.mode === "cruise" || state.mode === "demo") els.pedalHint.textContent = t("pedal.auto");
       else els.pedalHint.textContent = t("pedal.hold");
     }
@@ -1380,6 +1869,7 @@
     else if (state.engine === "running") hint = "hint." + state.mode;
     if (els.hint) els.hint.textContent = t(hint);
 
+    renderGpsUi();
     updateAudioStatus();
   }
 
@@ -1535,6 +2025,12 @@
         : t("diag.none")),
       diagRow(t("diag.maxGap"), state.telemetry.maxGap ? fmtMs(state.telemetry.maxGap, 0) : t("diag.none")),
       diagRow(t("diag.fps"), Math.round(state.fps.value) + " fps"),
+      diagRow(t("diag.gpsStatus"), gpsStatusText()),
+      diagRow(t("diag.gpsSpeed"), state.gps.speedMps === null ? t("diag.none") : (state.gps.speedMps * 3.6).toFixed(1) + " km/h"),
+      diagRow(t("diag.gpsAccuracy"), state.gps.accuracy === null ? t("diag.none") : state.gps.accuracy.toFixed(1) + " m"),
+      diagRow(t("diag.gpsAccel"), state.gps.accel1.toFixed(2) + " / " + state.gps.accel2.toFixed(2) + " m/s²"),
+      diagRow(t("diag.gpsAge"), state.gps.lastFixAt ? ((performance.now() - state.gps.lastFixAt) / 1000).toFixed(1) + " s" : t("diag.none")),
+      diagRow(t("diag.gpsFixes"), String(state.gps.fixes) + " · " + state.gps.confidence.toFixed(2)),
       diagRow(t("diag.engine"), engineLabel(state.engine)),
       diagRow(t("diag.preset"), presetName(state.preset)),
       diagRow(t("diag.mode"), modeLabel(state.mode)),
@@ -1578,6 +2074,25 @@
         count: state.telemetry.heartbeat,
         lastGapMs: state.telemetry.lastGap,
         maxGapMs: state.telemetry.maxGap
+      },
+      gps: {
+        supported: state.gps.supported,
+        secure: state.gps.secure,
+        watching: state.gps.watching,
+        permission: state.gps.permission,
+        status: gpsStatusKey(),
+        speedKmh: state.gps.speedMps === null ? null : state.gps.speedMps * 3.6,
+        accuracyM: state.gps.accuracy,
+        intervalMs: state.gps.intervalMs,
+        ageMs: state.gps.lastFixAt ? performance.now() - state.gps.lastFixAt : null,
+        accel1Mps2: state.gps.accel1,
+        accel2Mps2: state.gps.accel2,
+        confidence: state.gps.confidence,
+        fixes: state.gps.fixes,
+        gaps: state.gps.gaps,
+        lastGapMs: state.gps.lastGapMs,
+        rejected: state.gps.rejected,
+        error: state.gps.error
       },
       fps: state.fps.value,
       audioError: state.audioError
@@ -1661,6 +2176,7 @@
 
   function updateOverlayButtons() {
     if (els.overlayStart) els.overlayStart.disabled = state.busy;
+    if (els.overlayGps) els.overlayGps.disabled = state.busy;
     if (els.overlayDemo) els.overlayDemo.disabled = state.busy;
   }
 
@@ -1677,6 +2193,7 @@
     els = {
       startOverlay: byId("startOverlay"),
       overlayStart: byId("overlayStart"),
+      overlayGps: byId("overlayGps"),
       overlayDemo: byId("overlayDemo"),
       overlayVersion: byId("overlayVersion"),
       presetCards: byId("presetCards"),
@@ -1687,6 +2204,14 @@
       startBtn: byId("startBtn"),
       stopBtn: byId("stopBtn"),
       panicBtn: byId("panicBtn"),
+      gpsPanel: byId("gpsPanel"),
+      gpsState: byId("gpsState"),
+      gpsSpeed: byId("gpsSpeed"),
+      gpsAccuracy: byId("gpsAccuracy"),
+      gpsMeta: byId("gpsMeta"),
+      gpsRetry: byId("gpsRetry"),
+      gpsBadge: byId("gpsBadge"),
+      speedSource: byId("speedSource"),
       valveBtn: byId("valveBtn"),
       wakeBtn: byId("wakeBtn"),
       fsBtn: byId("fsBtn"),
@@ -1739,6 +2264,7 @@
 
   function setupEvents() {
     if (els.overlayStart) els.overlayStart.addEventListener("click", function () { startEngine("neutral"); });
+    if (els.overlayGps) els.overlayGps.addEventListener("click", function () { startEngine("gps"); });
     if (els.overlayDemo) els.overlayDemo.addEventListener("click", function () { startEngine("demo"); });
     if (els.startBtn) els.startBtn.addEventListener("click", function () { startEngine("neutral"); });
     if (els.stopBtn) els.stopBtn.addEventListener("click", stopEngine);
@@ -1884,6 +2410,13 @@
           });
         }
         if (state.wakeWanted && !state.wakeLock) requestWakeLock(true);
+        if (state.mode === "gps" && state.engine === "running") {
+          if (!state.gps.watching) {
+            startGps(true);
+          } else if (state.gps.lastFixAt && performance.now() - state.gps.lastFixAt > 8000) {
+            restartGps();
+          }
+        }
       }
     });
 
@@ -1935,6 +2468,22 @@
   /* Init                                                               */
   /* ------------------------------------------------------------------ */
 
+  function injectGpsFix(data) {
+    if (!data || typeof data.speedMps !== "number" || !isFinite(data.speedMps)) return false;
+    state.gps.supported = true;
+    state.gps.secure = true;
+    state.gps.watching = true;
+    state.gps.error = null;
+    state.gps.permission = "granted";
+    return applyGpsSample(
+      data.speedMps,
+      data.accuracyMps === undefined ? 1 : data.accuracyMps,
+      data.headingDeg === undefined ? null : data.headingDeg,
+      performance.now(),
+      "gps"
+    );
+  }
+
   function init() {
     cacheElements();
     restoreSettings();
@@ -1961,13 +2510,18 @@
       setPreset: setPreset,
       setVolume: setVolume,
       spectrum: spectrum,
-      diagnostics: diagnosticsObject
+      diagnostics: diagnosticsObject,
+      gps: state.gps,
+      startGps: startGps,
+      stopGps: stopGps,
+      restartGps: restartGps,
+      injectGps: injectGpsFix
     };
 
     var params = new URLSearchParams(window.location.search);
     var auto = params.get("autostart");
     if (auto) {
-      var mode = auto === "demo" ? "demo" : auto === "cruise" ? "cruise" : auto === "manual" ? "manual" : "neutral";
+      var mode = auto === "demo" ? "demo" : auto === "cruise" ? "cruise" : auto === "manual" ? "manual" : auto === "gps" ? "gps" : "neutral";
       setTimeout(function () { startEngine(mode); }, 250);
     }
   }

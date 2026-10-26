@@ -285,6 +285,72 @@ body::before {
   margin-top: 2px;
 }
 
+/* ---------- GPS source ---------- */
+
+.gps-panel {
+  display: grid;
+  gap: 6px;
+  padding: 10px 11px;
+  border: 1px solid rgba(56, 211, 159, 0.22);
+  border-radius: 12px;
+  background: rgba(56, 211, 159, 0.055);
+}
+
+.gps-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.gps-panel-speed {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.gps-panel-speed strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.gps-panel-speed small { color: var(--muted); font-size: 0.58rem; }
+.gps-panel-speed span {
+  margin-left: auto;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.gps-meta {
+  min-height: 1.4em;
+  color: var(--dim);
+  font-size: 0.62rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.gps-panel .badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.speed em.gps {
+  border-color: rgba(56, 211, 159, 0.35);
+  color: var(--ok);
+}
+
 /* ---------- buttons ---------- */
 
 .btn {
@@ -1010,6 +1076,7 @@ body::before {
   .left-panel .section-label:first-child { grid-column: 1 / -1; }
   .mode-list { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
   .engine-actions { grid-column: 1 / -1; }
+  .gps-panel { grid-column: 1 / -1; }
   .left-panel .volume-row,
   .left-panel .range { grid-column: 1 / -1; }
   .left-panel #valveBtn,
@@ -1032,6 +1099,7 @@ body::before {
   .left-panel .section-label,
   .mode-list,
   .engine-actions,
+  .gps-panel,
   .left-panel .volume-row,
   .left-panel .range { grid-column: auto; }
   .right-panel { grid-template-columns: 1fr; }

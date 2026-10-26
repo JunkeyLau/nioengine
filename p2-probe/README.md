@@ -103,6 +103,20 @@ https://nioengine.com/sensors/
 
 ---
 
+## 首轮真车结果（2026-10-26）
+
+已用 `p2run.log` 完成一次 20 分钟城市道路测试：
+
+- **GPS 通过**：2014 个样本，2 Hz，`coords.speed` 无缺失；精度中位 0.68 m；最高 61.6 km/h；GPS 速度与推算速度平均差 0.49 km/h。
+- **IMU 不可用**：DeviceMotion / DeviceOrientation 20 分钟只有 6 个全 null 事件；Generic Sensor 三种全部 `Could not connect to a sensor`。
+- **结论**：不做 GPS+IMU 融合，走 **GPS-only + 虚拟变速箱 + 1 s/2 s 速度差分负载**。
+- **P2.1 已实现**：P1 0.3.0 的 **GPS** 驾驶模式。
+- 代价是负载响应约 1–2 s，叠加 98 ms 音频延迟后不适合瞬时“踩下就轰”；连续驾驶/巡航可用。
+
+完整数据、加速度噪声、hidden 间隙和 P2.1 方案见 **[docs/p2run-analysis.md](docs/p2run-analysis.md)**。
+
+---
+
 ## 判定标准
 
 | 结果 | 结论 |
