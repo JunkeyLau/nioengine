@@ -102,7 +102,7 @@ npx wrangler dev
 | Production branch | `main`（或你的主分支） |
 | Root directory | `/`（仓库根目录） |
 | Build command | `npm run build:all` |
-| Deploy command | `npx wrangler deploy` |
+| Deploy command | `npm run deploy` |
 | Environment variable | `NODE_VERSION=22`（可选但推荐） |
 
 保存后第一次构建会执行：
@@ -110,13 +110,13 @@ npx wrangler dev
 ```text
 npm install / npm ci
 npm run build:all
-npx wrangler deploy
+npm run deploy
 ```
 
 如果自动安装依赖被跳过、提示找不到 `wrangler`，把 Deploy command 改成：
 
 ```bash
-npx --yes wrangler deploy
+npm run deploy
 ```
 
 或在 Build command 前加 `npm install`：
@@ -262,7 +262,7 @@ curl -I https://nioengine.com/sensors/
 本地改代码
   → git push main
   → Cloudflare Workers Builds 自动 npm run build:all
-  → npx wrangler deploy
+  → npm run deploy
   → 新版本上线
 ```
 
@@ -312,7 +312,7 @@ curl -I https://nioengine.com/sensors/
 把 Deploy command 改成：
 
 ```bash
-npx --yes wrangler deploy
+npm run deploy
 ```
 
 或 Build command：
